@@ -1,0 +1,96 @@
+.winnerCard {
+  background: var(--color-brand);
+  color: var(--color-brand-contrast);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.winnerLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.85;
+  margin: 0 0 0.25rem;
+}
+
+.winnerName {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.forceNote {
+  background: #fff3cd;
+  color: #6b5100;
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.meta {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.leaderboard {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+
+.row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.75rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.625rem;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+
+.rank {
+  font-weight: 800;
+  color: var(--color-text-muted);
+}
+
+.teamName {
+  font-weight: 700;
+}
+
+.score {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--color-brand-dark);
+}
+
+.strokes {
+  grid-column: 2 / 3;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.auditList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.auditRow {
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.625rem 0;
+  font-size: 0.85rem;
+}
+
+.auditMeta {
+  color: var(--color-text-muted);
+}

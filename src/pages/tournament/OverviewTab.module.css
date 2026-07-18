@@ -1,0 +1,119 @@
+.details {
+  margin: 0 0 1.5rem;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.row dt {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.row dd {
+  margin: 0;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.statusValue {
+  color: var(--color-brand);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.roster {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+
+.roster li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.organizerTag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-brand);
+  margin-left: 0.375rem;
+}
+
+.banner {
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+  text-align: center;
+}
+
+.bannerIncomplete {
+  background: #f3ede0;
+  color: #8a6d00;
+}
+
+.bannerReady {
+  background: #e0f5e6;
+  color: #1b8a4a;
+}
+
+.bannerLive {
+  background: #dff0fb;
+  color: #1a5f8a;
+}
+
+.checklist {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+
+.checklist li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  font-size: 0.9rem;
+}
+
+.checklistDone {
+  color: var(--color-text);
+}
+
+.checklistDone span {
+  color: #1b8a4a;
+  font-weight: 700;
+}
+
+.checklistPending {
+  color: var(--color-text-muted);
+}
+
+.checklistPending span {
+  color: var(--color-text-muted);
+}
+
+.liveActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.liveActions a {
+  text-decoration: none;
+  text-align: center;
+}
+
+.forceFinishCard {
+  margin-top: 1rem;
+  border-color: var(--color-danger);
+}

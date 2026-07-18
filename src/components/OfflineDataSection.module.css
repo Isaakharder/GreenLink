@@ -1,0 +1,92 @@
+.section {
+  margin-bottom: 1.25rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.625rem;
+}
+
+.title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.statusBadge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+
+.status-ready {
+  background: #e0f5e6;
+  color: #1b8a4a;
+}
+
+.status-update-available {
+  background: #f3ede0;
+  color: #8a6d00;
+}
+
+.status-failed {
+  background: #fbe4e1;
+  color: var(--color-danger);
+}
+
+.status-downloading {
+  background: #dff0fb;
+  color: #1a5f8a;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem 1rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.meta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.25rem 0;
+}
+
+.meta dt {
+  color: var(--color-text-muted);
+}
+
+.meta dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.confirmPanel {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: #fff3cd;
+  border-radius: var(--radius);
+}
+
+.confirmPanel p {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: #6b5100;
+}

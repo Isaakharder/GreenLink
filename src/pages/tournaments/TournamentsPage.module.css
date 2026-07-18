@@ -1,0 +1,87 @@
+.waitNote {
+  text-align: center;
+  color: var(--color-text-muted);
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+
+.sectionEmpty {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.625rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.invitationCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.625rem;
+}
+
+.cardName {
+  font-weight: 700;
+  margin-bottom: 0.125rem;
+}
+
+.cardMeta {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 0;
+}
+
+.statusBadge {
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #eef1ee;
+  color: var(--color-text-muted);
+}
+
+.statusBadge.live {
+  background: #e0f5e6;
+  color: #1b8a4a;
+}
+
+.statusBadge.completed {
+  background: #e6edf5;
+  color: #2a4d8a;
+}
+
+.statusBadge.cancelled {
+  background: #f7e6e5;
+  color: var(--color-danger);
+}
+
+.invitationActions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.invitationActions button {
+  flex: 1;
+}
+
+.createButton {
+  margin-top: 1rem;
+  text-decoration: none;
+  text-align: center;
+}

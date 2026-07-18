@@ -1,0 +1,11 @@
+{
+  "tournamentId": "d5754b7a-0c19-4026-b27a-5eac0c3b1d74",
+  "playerA": {
+    "email": "e2e-player-a-1784382956678@example.test",
+    "password": "e2e-password-123"
+  },
+  "playerB": {
+    "email": "e2e-player-b-1784382956678@example.test",
+    "password": "e2e-password-123"
+  }
+}
