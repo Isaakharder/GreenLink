@@ -1,9 +1,16 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { AUTH_ERROR_MESSAGES, describeAuthError, type AuthErrorKind } from '../lib/authErrors';
 import styles from './AuthForm.module.css';
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.]{3,20}$/;
+const RESEND_COOLDOWN_MS = 30_000;
+
+// Signup failures where the account may already exist unconfirmed (or the
+// confirmation email just didn't arrive) -- offer a way to resend instead
+// of leaving the user stuck.
+const RESEND_ELIGIBLE_KINDS = new Set<AuthErrorKind>(['rate_limited', 'duplicate_email', 'email_send_failed']);
 
 export function SignUp() {
   const navigate = useNavigate();
@@ -15,9 +22,31 @@ export function SignUp() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+
+  const [showResend, setShowResend] = useState(false);
+  const [resendEmail, setResendEmail] = useState('');
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
+  const resendingRef = useRef(false);
+
+  function offerResend(forEmail: string) {
+    setShowResend(true);
+    setResendEmail(forEmail);
+    setResendMessage(null);
+    setResendError(null);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+
+    // Synchronous ref check (not just the `submitting` state) so a rapid
+    // double-tap can't slip a second signUp() through before React commits
+    // the first setSubmitting(true) render.
+    if (submittingRef.current) return;
+
     setError(null);
     setInfo(null);
 
@@ -27,47 +56,98 @@ export function SignUp() {
       return;
     }
 
+    submittingRef.current = true;
     setSubmitting(true);
 
-    const { data: isAvailable, error: availabilityError } = await supabase.rpc('is_username_available', {
-      p_username: trimmedUsername,
-    });
+    try {
+      const { data: isAvailable, error: availabilityError } = await supabase.rpc('is_username_available', {
+        p_username: trimmedUsername,
+      });
 
-    if (availabilityError) {
-      setSubmitting(false);
-      setError(availabilityError.message);
-      return;
-    }
+      if (availabilityError) {
+        setError(describeAuthError(availabilityError, 'sign-up:username-check').message);
+        return;
+      }
 
-    if (!isAvailable) {
-      setSubmitting(false);
-      setError('That username is already taken.');
-      return;
-    }
+      if (!isAvailable) {
+        setError('That username is already taken.');
+        return;
+      }
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          username: trimmedUsername,
+      const trimmedEmail = email.trim();
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            username: trimmedUsername,
+          },
         },
-      },
-    });
+      });
 
-    setSubmitting(false);
+      if (signUpError) {
+        const { kind, message } = describeAuthError(signUpError, 'sign-up');
+        setError(message);
+        if (RESEND_ELIGIBLE_KINDS.has(kind)) {
+          offerResend(trimmedEmail);
+        }
+        return;
+      }
 
-    if (signUpError) {
-      setError(signUpError.message);
+      if (data.session) {
+        navigate('/home', { replace: true });
+        return;
+      }
+
+      // Supabase's enumeration-safe behavior: signing up again with an
+      // email that's already registered "succeeds" (no session, no error)
+      // but returns a user with an empty identities array instead of
+      // actually creating a second account.
+      const alreadyRegistered = data.user && (data.user.identities?.length ?? 0) === 0;
+      if (alreadyRegistered) {
+        setError(AUTH_ERROR_MESSAGES.duplicate_email);
+        offerResend(trimmedEmail);
+        return;
+      }
+
+      setInfo('Account created! Check your email to confirm your address, then sign in.');
+      offerResend(trimmedEmail);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  async function handleResend() {
+    if (resendingRef.current || resendCooldown) return;
+
+    const targetEmail = resendEmail.trim();
+    if (!targetEmail) {
+      setResendError('Enter the email you signed up with.');
       return;
     }
 
-    if (data.session) {
-      navigate('/home', { replace: true });
-    } else {
-      setInfo('Account created! Check your email to confirm your address, then sign in.');
+    resendingRef.current = true;
+    setResending(true);
+    setResendCooldown(true);
+    setResendMessage(null);
+    setResendError(null);
+
+    try {
+      const { error: resendErr } = await supabase.auth.resend({ type: 'signup', email: targetEmail });
+
+      if (resendErr) {
+        setResendError(describeAuthError(resendErr, 'resend-confirmation').message);
+        return;
+      }
+
+      setResendMessage('Confirmation email sent. Check your inbox and spam folder.');
+    } finally {
+      resendingRef.current = false;
+      setResending(false);
+      window.setTimeout(() => setResendCooldown(false), RESEND_COOLDOWN_MS);
     }
   }
 
@@ -135,6 +215,33 @@ export function SignUp() {
           {submitting ? 'Creating account…' : 'Sign Up'}
         </button>
       </form>
+
+      {showResend && (
+        <div className={styles.resend}>
+          <p>Already created your account? Resend confirmation email.</p>
+          <div className="field">
+            <label htmlFor="resendEmail">Email</label>
+            <input
+              id="resendEmail"
+              type="email"
+              autoComplete="email"
+              value={resendEmail}
+              onChange={(event) => setResendEmail(event.target.value)}
+            />
+          </div>
+          {resendError && <p className="error-text">{resendError}</p>}
+          {resendMessage && <p className={styles['info-text']}>{resendMessage}</p>}
+          <button
+            type="button"
+            className="btn btn-secondary btn-small"
+            disabled={resending || resendCooldown}
+            onClick={() => void handleResend()}
+          >
+            {resending ? 'Sending…' : 'Resend Confirmation Email'}
+          </button>
+        </div>
+      )}
+
       <p className={styles.switch}>
         Already have an account? <Link to="/sign-in">Sign In</Link>
       </p>
