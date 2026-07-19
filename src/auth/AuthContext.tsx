@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { initConnectionMonitor } from '../lib/sync';
+import { initChatSyncMonitor } from '../lib/chatSync';
 import { AuthContext, type AuthContextValue } from './context';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -22,6 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     initConnectionMonitor();
+    initChatSyncMonitor();
 
     return () => {
       isMounted = false;

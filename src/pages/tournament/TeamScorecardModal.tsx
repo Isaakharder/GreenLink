@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { formatRelativeTime } from '../../lib/relativeTime';
-import { formatRelativeToPar } from '../../lib/leaderboard';
+import { formatRelativeToPar, formatTeamName } from '../../lib/leaderboard';
 import type { TeamHoleScore, TournamentHole, TournamentTeam } from '../../types/database';
 import styles from './TeamScorecardModal.module.css';
 
@@ -13,6 +13,12 @@ interface TeamScorecardModalProps {
   isLive: boolean;
   tournamentId: string;
   onClose: () => void;
+  /** Extra context line under the title (e.g. "Player · Tee played · Date") -- used by My Golf's read-only round views. Tournament call sites omit it. */
+  subtitle?: string;
+  /** My Golf only: this round is a personal round under the hood -- drives the title fallback ("My Round" instead of "Team 1") and routes "Go to Your Scorecard" to /my-golf instead of /tournaments. Tournament call sites omit it (default false). */
+  isPersonal?: boolean;
+  /** Overrides the title outright (e.g. the player's name on a public feed item). Takes priority over both the team name and the isPersonal fallback. */
+  title?: string;
 }
 
 /**
@@ -29,9 +35,13 @@ export function TeamScorecardModal({
   isLive,
   tournamentId,
   onClose,
+  subtitle,
+  isPersonal = false,
+  title,
 }: TeamScorecardModalProps) {
   const sortedHoles = [...holes].sort((a, b) => a.hole_number - b.hole_number);
   const scoreByHole = new Map(scores.map((s) => [s.hole_number, s]));
+  const displayTitle = title ?? (isPersonal ? 'My Round' : formatTeamName(team));
 
   let runningStrokes = 0;
   let runningPar = 0;
@@ -44,12 +54,13 @@ export function TeamScorecardModal({
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.sheet} onClick={(event) => event.stopPropagation()}>
         <div className={styles.header}>
-          <h2 className={styles.title}>{team.name ?? `Team ${team.team_number ?? ''}`}</h2>
+          <h2 className={styles.title}>{displayTitle}</h2>
           <button type="button" className={styles.closeButton} aria-label="Close" onClick={onClose}>
             ×
           </button>
         </div>
 
+        {subtitle && <p className={styles.summary}>{subtitle}</p>}
         {lastUpdated && <p className={styles.summary}>Last updated {formatRelativeTime(lastUpdated)}</p>}
 
         <table className={styles.table}>
@@ -83,8 +94,12 @@ export function TeamScorecardModal({
         </table>
 
         {isOwnTeam && isLive && (
-          <Link to={`/tournaments/${tournamentId}/scorecard`} className="btn btn-primary" onClick={onClose}>
-            Go to Your Scorecard
+          <Link
+            to={isPersonal ? `/my-golf/round/${tournamentId}` : `/tournaments/${tournamentId}/scorecard`}
+            className="btn btn-primary"
+            onClick={onClose}
+          >
+            {isPersonal ? 'Continue Round' : 'Go to Your Scorecard'}
           </Link>
         )}
         {!isOwnTeam && isOrganizer && (

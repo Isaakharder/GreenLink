@@ -6,8 +6,9 @@ import { applyScoreChange, retrySyncNow } from '../../lib/sync';
 import { useLeaderboardData } from '../../hooks/useLeaderboardData';
 import { useAuth } from '../../auth/useAuth';
 import { useConnectionState } from '../../hooks/useConnectionState';
-import { formatRelativeToPar } from '../../lib/leaderboard';
+import { formatRelativeToPar, formatTeamName } from '../../lib/leaderboard';
 import { computeHoleStatus, computeQuickScoreStrokes, findFirstUnscoredHole, type HoleStatus } from '../../lib/teamMath';
+import { useProfile } from '../../hooks/useProfile';
 import { ConflictBanner } from './ConflictBanner';
 import type { TournamentAccess } from '../../hooks/useTournamentAccess';
 import type { ConflictInfo } from '../../lib/conflict';
@@ -45,6 +46,12 @@ export function ScorecardTab() {
   const connectionState = useConnectionState();
   const teamId = membership?.team_id ?? null;
   const isLive = tournament?.status === 'live';
+  const isPersonal = tournament?.is_personal ?? false;
+
+  // Only ever needed for a personal round's header ("<Player Name>" instead
+  // of "Team 1") -- harmless (and simply unused) for a tournament, where
+  // the team name is shown instead. Called unconditionally per rules of hooks.
+  const { data: profile } = useProfile();
 
   const leaderboard = useLeaderboardData(
     tournament?.id,
@@ -135,9 +142,14 @@ export function ScorecardTab() {
   if (!isLive) {
     return (
       <div>
-        <p className={styles.readOnlyNotice}>Tournament completed — scores are final.</p>
-        <Link to={`/tournaments/${tournament.id}/overview`} className="btn btn-secondary btn-auto">
-          View Results
+        <p className={styles.readOnlyNotice}>
+          {isPersonal ? 'Round completed — scores are final.' : 'Tournament completed — scores are final.'}
+        </p>
+        <Link
+          to={isPersonal ? '/my-golf' : `/tournaments/${tournament.id}/overview`}
+          className="btn btn-secondary btn-auto"
+        >
+          {isPersonal ? 'Back to My Golf' : 'View Results'}
         </Link>
       </div>
     );
@@ -150,7 +162,7 @@ export function ScorecardTab() {
 
   const ownTeam = leaderboard.teams.find((t) => t.id === teamId);
   const ownStanding = leaderboard.standings.find((s) => s.teamId === teamId);
-  const teamName = ownTeam?.name ?? `Team ${ownTeam?.team_number ?? ''}`;
+  const teamName = formatTeamName(ownTeam ?? { name: null, team_number: null });
   const holesCompleted = scoredHoleNumbers.length;
 
   async function commitScore(holeNumber: number, strokes: number) {
@@ -218,19 +230,36 @@ export function ScorecardTab() {
   return (
     <div>
       <div className={styles.header}>
-        <p className={styles.tournamentName}>{tournament.name}</p>
-        <p className={styles.statusLine}>
-          {teamName}
-          {ownStanding && (
-            <>
-              {' · '}
-              <strong>{ownStanding.isTied ? `Tied for ${ordinal(ownStanding.rank)} Place` : `${ordinal(ownStanding.rank)} Place`}</strong>
-              {' · '}
-              {formatRelativeToPar(ownStanding.relativeToPar)}
-            </>
-          )}
-          {' · '}Through {holesCompleted}
-        </p>
+        {isPersonal ? (
+          <>
+            <p className={styles.tournamentName}>{profile ? `${profile.first_name} ${profile.last_name}` : 'My Round'}</p>
+            <p className={styles.statusLine}>
+              {selectedHole !== null && `Hole ${selectedHole} of ${holeNumbers.length}`}
+              {ownStanding && (
+                <>
+                  {' · '}
+                  {formatRelativeToPar(ownStanding.relativeToPar)}
+                </>
+              )}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className={styles.tournamentName}>{tournament.name}</p>
+            <p className={styles.statusLine}>
+              {teamName}
+              {ownStanding && (
+                <>
+                  {' · '}
+                  <strong>{ownStanding.isTied ? `Tied for ${ordinal(ownStanding.rank)} Place` : `${ordinal(ownStanding.rank)} Place`}</strong>
+                  {' · '}
+                  {formatRelativeToPar(ownStanding.relativeToPar)}
+                </>
+              )}
+              {' · '}Through {holesCompleted}
+            </p>
+          </>
+        )}
         {leaderboard.usingCache && <p className={styles.cacheNotice}>Showing last synced standings — reconnect to refresh.</p>}
       </div>
 

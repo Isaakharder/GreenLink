@@ -1,5 +1,10 @@
 import type { TeamHoleScore, TournamentHole, TournamentTeam } from '../types/database';
 
+/** "Team Blue" if named, else "Team 3" -- the one team-name fallback used everywhere a team's display name is needed (standings, the scorecard header, the read-only scorecard modal, chat message rows). */
+export function formatTeamName(team: Pick<TournamentTeam, 'name' | 'team_number'>): string {
+  return team.name ?? `Team ${team.team_number ?? ''}`;
+}
+
 export interface TeamStanding {
   teamId: string;
   teamName: string;
@@ -39,7 +44,7 @@ export function computeStandings(
 
     return {
       teamId: team.id,
-      teamName: team.name ?? `Team ${team.team_number ?? ''}`,
+      teamName: formatTeamName(team),
       relativeToPar,
       totalStrokes,
       holesPlayed: teamScores.length,

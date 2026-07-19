@@ -1,4 +1,5 @@
 import { BigButton } from '../components/BigButton';
+import { CommunityFeed } from '../components/CommunityFeed';
 import { useProfile } from '../hooks/useProfile';
 import styles from './Home.module.css';
 
@@ -12,6 +13,7 @@ export function Home() {
         <BigButton to="/tournaments" label="Tournament" icon="🏆" />
         <BigButton to="/my-golf" label="My Golf" icon="⛳" />
       </div>
+      <CommunityFeed />
     </div>
   );
 }

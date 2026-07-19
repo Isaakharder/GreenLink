@@ -9,6 +9,8 @@ import { SignUp } from './pages/SignUp';
 import { Home } from './pages/Home';
 import { Profile } from './pages/Profile';
 import { MyGolf } from './pages/MyGolf';
+import { StartRound } from './pages/myGolf/StartRound';
+import { PersonalRoundShell } from './pages/myGolf/PersonalRoundShell';
 import { TournamentsPage } from './pages/tournaments/TournamentsPage';
 import { CreateTournament } from './pages/tournaments/CreateTournament';
 import { TournamentDetail } from './pages/tournament/TournamentDetail';
@@ -45,6 +47,10 @@ export function App() {
             <Route element={<AppShell />}>
               <Route path="/home" element={<Home />} />
               <Route path="/my-golf" element={<MyGolf />} />
+              <Route path="/my-golf/start" element={<StartRound />} />
+              <Route path="/my-golf/round/:tournamentId" element={<PersonalRoundShell />}>
+                <Route index element={<ScorecardTab />} />
+              </Route>
               <Route path="/profile" element={<Profile />} />
 
               <Route path="/tournaments" element={<TournamentsPage />} />

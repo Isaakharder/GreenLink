@@ -19,6 +19,7 @@ export interface CachedTournament {
   golfCourseTeeId: string | null;
   courseRating: number | null;
   slopeRating: number | null;
+  isPersonal: boolean;
 }
 
 export interface CachedPlayer {
@@ -104,6 +105,35 @@ export interface PendingScoreOperation {
   conflictSubmittedStrokes: number | null;
 }
 
+// Server-confirmed chat messages, write-through cached (mirrors CachedScore's
+// role) -- lets a member keep reading chat history while offline.
+export interface CachedMessage {
+  id: string; // tournament_messages.id
+  tournamentId: string;
+  senderUserId: string;
+  senderTeamId: string | null;
+  messageText: string;
+  createdAt: string;
+  deletedAt: string | null;
+}
+
+export type PendingMessageState = 'pending' | 'sending' | 'failed';
+
+// Offline send queue for chat -- deliberately not shaped like
+// PendingScoreOperation: a message is create-only (no revision, no
+// coalescing target, nothing to correct), so there's no expectedRevision/
+// conflict bookkeeping to carry.
+export interface PendingMessage {
+  operationUuid: string; // primary key — also the idempotency key sent to the server
+  tournamentId: string;
+  messageText: string;
+  createdAt: string;
+  state: PendingMessageState;
+  lastError: string | null;
+  retryCount: number;
+  nextRetryAt: string | null;
+}
+
 export function scoreCacheKey(tournamentId: string, teamId: string, holeNumber: number): string {
   return `${tournamentId}_${teamId}_${holeNumber}`;
 }
@@ -121,6 +151,8 @@ class GreenLinkDB extends Dexie {
   cachedPlayers!: Table<CachedPlayer, string>;
   cachedDownloads!: Table<CachedDownload, string>;
   pendingScoreOperations!: Table<PendingScoreOperation, string>;
+  cachedMessages!: Table<CachedMessage, string>;
+  pendingMessages!: Table<PendingMessage, string>;
 
   constructor() {
     super('greenlink');
@@ -171,6 +203,24 @@ class GreenLinkDB extends Dexie {
       cachedDownloads: 'tournamentId',
       pendingScoreOperations:
         'operationUuid, tournamentId, state, createdAt, [tournamentId+teamId+holeNumber]',
+    });
+
+    // v4: adds cachedMessages (tournament chat read cache) and
+    // pendingMessages (chat's own small offline send queue -- separate from
+    // pendingScoreOperations since a message has none of the revision/
+    // conflict/coalescing semantics a score correction has).
+    this.version(4).stores({
+      cachedTournaments: 'id, status',
+      cachedMemberships: 'id, tournamentId',
+      cachedTeams: 'id, tournamentId',
+      cachedHoles: 'id, tournamentId, [tournamentId+holeNumber]',
+      cachedScores: 'id, tournamentId, teamId, [tournamentId+teamId+holeNumber]',
+      cachedPlayers: 'id, tournamentId',
+      cachedDownloads: 'tournamentId',
+      pendingScoreOperations:
+        'operationUuid, tournamentId, state, createdAt, [tournamentId+teamId+holeNumber]',
+      cachedMessages: 'id, tournamentId, [tournamentId+createdAt]',
+      pendingMessages: 'operationUuid, tournamentId, state, createdAt',
     });
   }
 }

@@ -1,0 +1,54 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.item {
+  width: 100%;
+  text-align: left;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+}
+
+.itemHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.playerName {
+  font-weight: 700;
+}
+
+.time {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.itemScore {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.125rem;
+}
+
+.score {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.relative {
+  color: var(--color-text-muted);
+}
+
+.course {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}

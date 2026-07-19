@@ -6,6 +6,8 @@ export type TournamentStatus = 'draft' | 'upcoming' | 'live' | 'completed' | 'ca
 export type InvitationStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
 export type MembershipStatus = 'accepted' | 'removed';
 export type DistanceUnit = 'yards' | 'metres';
+export type PersonalRoundVisibility = 'private' | 'public';
+export type WalkingOrCart = 'walking' | 'cart';
 
 export interface Profile {
   id: string;
@@ -37,6 +39,50 @@ export interface Tournament {
   course_rating: number | null;
   slope_rating: number | null;
   data_version: number;
+  is_personal: boolean;
+}
+
+// My Golf (Phase 1): a personal round is a one-player tournament
+// (tournaments.is_personal = true) with this 1:1 extension row for the
+// fields a tournament has no concept of. See supabase/migrations/0024.
+export interface PersonalRound {
+  tournament_id: string;
+  visibility: PersonalRoundVisibility;
+  walking_or_cart: WalkingOrCart;
+  created_at: string;
+}
+
+// get_public_round_feed() return shape (Home page Community Feed).
+export interface PublicRoundFeedItem {
+  tournament_id: string;
+  player_first_name: string;
+  player_last_name: string;
+  course_name: string;
+  tee_name: string | null;
+  tournament_date: string;
+  completed_at: string;
+  hole_count: number;
+  total_strokes: number;
+  relative_to_par: number;
+}
+
+// get_my_golf_stats() return shape.
+export interface MyGolfBestRound {
+  tournament_id: string;
+  course_name: string;
+  tournament_date: string;
+  relative_to_par: number;
+}
+
+export interface MyGolfStats {
+  rounds_played: number;
+  average_score: number | null;
+  best_round: MyGolfBestRound | null;
+  birdies: number;
+  pars: number;
+  bogeys: number;
+  double_bogeys_plus: number;
+  courses_played: number;
 }
 
 // Rows cached from GolfCourseAPI (see supabase/functions/golf-course-lookup)
@@ -195,4 +241,39 @@ export interface TournamentProgress {
   teams_playing: number;
   total_synced_entries: number;
   all_complete: boolean;
+}
+
+// Live tournament chat (supabase/migrations/0025). One shared channel per
+// tournament in Phase 1 -- sender_team_id is snapshotted at send time
+// (team assignment is frozen once a tournament is live) rather than joined
+// live, and is unused for filtering until a future team-only channel.
+export interface TournamentMessage {
+  id: string;
+  operation_uuid: string;
+  tournament_id: string;
+  sender_user_id: string;
+  sender_team_id: string | null;
+  message_text: string;
+  created_at: string;
+  edited_at: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+}
+
+export interface TournamentChatRead {
+  tournament_id: string;
+  user_id: string;
+  last_read_at: string;
+}
+
+// get_tournament_chat_summary() return shape.
+export interface TournamentChatSummary {
+  unread_count: number;
+  last_read_at: string | null;
+}
+
+// get_my_tournament_unread_counts() return shape (one row per live tournament).
+export interface TournamentUnreadCount {
+  tournament_id: string;
+  unread_count: number;
 }

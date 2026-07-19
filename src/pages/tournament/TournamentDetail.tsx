@@ -1,6 +1,7 @@
 import { Outlet, useParams } from 'react-router-dom';
 import { useTournamentAccess } from '../../hooks/useTournamentAccess';
 import { TournamentTabBar } from '../../components/TournamentTabBar';
+import { TournamentChat } from '../../components/chat/TournamentChat';
 
 export function TournamentDetail() {
   const { tournamentId } = useParams<{ tournamentId: string }>();
@@ -43,6 +44,7 @@ export function TournamentDetail() {
         showSettings={access.isOrganizer}
       />
       <Outlet context={access} />
+      <TournamentChat access={access} />
     </div>
   );
 }

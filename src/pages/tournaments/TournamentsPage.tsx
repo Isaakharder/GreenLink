@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useTournamentLists, type PendingInvitation } from '../../hooks/useTournamentLists';
+import { useMyTournamentUnreadCounts } from '../../hooks/useMyTournamentUnreadCounts';
 import type { Tournament } from '../../types/database';
 import styles from './TournamentsPage.module.css';
 
@@ -14,11 +15,18 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function TournamentCard({ tournament }: { tournament: Tournament }) {
+function TournamentCard({ tournament, unreadCount = 0 }: { tournament: Tournament; unreadCount?: number }) {
   return (
     <Link to={`/tournaments/${tournament.id}/overview`} className={styles.card}>
       <div>
-        <p className={styles.cardName}>{tournament.name}</p>
+        <p className={styles.cardName}>
+          {tournament.name}
+          {unreadCount > 0 && (
+            <span className={styles.unreadBadge} aria-label={`${unreadCount} unread chat message${unreadCount === 1 ? '' : 's'}`}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </p>
         <p className={styles.cardMeta}>
           {tournament.course_name} · {formatDate(tournament.tournament_date)}
         </p>
@@ -91,6 +99,7 @@ function InvitationCard({
 
 export function TournamentsPage() {
   const { isLoading, invitations, active, upcoming, history, hasAnyRecords, refetch } = useTournamentLists();
+  const unreadCounts = useMyTournamentUnreadCounts();
 
   if (isLoading) {
     return <div className="page-status">Loading…</div>;
@@ -128,7 +137,9 @@ export function TournamentsPage() {
       {active.length === 0 ? (
         <p className={styles.sectionEmpty}>No active tournaments.</p>
       ) : (
-        active.map((tournament) => <TournamentCard key={tournament.id} tournament={tournament} />)
+        active.map((tournament) => (
+          <TournamentCard key={tournament.id} tournament={tournament} unreadCount={unreadCounts.data?.get(tournament.id)} />
+        ))
       )}
 
       <h2 className="section-title">Upcoming Tournaments</h2>

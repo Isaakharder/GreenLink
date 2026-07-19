@@ -17,6 +17,7 @@ async function fetchTournaments(): Promise<Tournament[]> {
   const { data, error } = await supabase
     .from('tournaments')
     .select('*')
+    .eq('is_personal', false)
     .order('tournament_date', { ascending: true });
   if (error) throw error;
   return data ?? [];

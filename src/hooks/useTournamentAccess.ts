@@ -113,16 +113,23 @@ export function useTournamentAccess(tournamentId: string | undefined): Tournamen
 
   const needsFallback = isOffline || tournamentQuery.isError || membershipQuery.isError;
 
+  // Deliberately NOT gated behind `needsFallback`: dexie-react-hooks'
+  // useLiveQuery has no "still loading" signal distinct from "resolved to
+  // undefined" -- gating this query so it only starts once fallback is
+  // needed meant the very first render after going offline saw an
+  // unresolved (not-yet-undefined-vs-empty) query and read it as "never
+  // cached," which flipped neverCachedOffline true for one frame and
+  // unmounted this route's whole subtree (losing any of its own component
+  // state, e.g. an open chat panel) before recovering on the next render.
+  // Running the query continuously from mount means it's already warm by
+  // the time it's actually needed.
   const cachedTournament = useLiveQuery(
-    () => (needsFallback && tournamentId ? db.cachedTournaments.get(tournamentId) : undefined),
-    [needsFallback, tournamentId],
+    () => (tournamentId ? db.cachedTournaments.get(tournamentId) : undefined),
+    [tournamentId],
   );
   const cachedMembership = useLiveQuery(
-    () =>
-      needsFallback && tournamentId && user
-        ? db.cachedMemberships.get(membershipCacheKey(tournamentId, user.id))
-        : undefined,
-    [needsFallback, tournamentId, user],
+    () => (tournamentId && user ? db.cachedMemberships.get(membershipCacheKey(tournamentId, user.id)) : undefined),
+    [tournamentId, user],
   );
 
   const fromCache = needsFallback && !!cachedTournament;
@@ -149,6 +156,7 @@ export function useTournamentAccess(tournamentId: string | undefined): Tournamen
           course_rating: cachedTournament.courseRating ?? null,
           slope_rating: cachedTournament.slopeRating ?? null,
           data_version: cachedTournament.dataVersion ?? 1,
+          is_personal: cachedTournament.isPersonal ?? false,
         }
       : null;
 

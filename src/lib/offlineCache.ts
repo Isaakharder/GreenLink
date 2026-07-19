@@ -24,6 +24,7 @@ export async function cacheTournament(tournament: Tournament): Promise<void> {
     golfCourseTeeId: tournament.golf_course_tee_id,
     courseRating: tournament.course_rating,
     slopeRating: tournament.slope_rating,
+    isPersonal: tournament.is_personal,
   });
 }
 
@@ -121,7 +122,7 @@ export async function cacheScores(tournamentId: string, scores: TeamHoleScore[])
 export async function clearPrivateCache(): Promise<void> {
   await db.transaction(
     'rw',
-    [db.cachedTournaments, db.cachedMemberships, db.cachedTeams, db.cachedHoles, db.cachedScores, db.cachedPlayers, db.cachedDownloads],
+    [db.cachedTournaments, db.cachedMemberships, db.cachedTeams, db.cachedHoles, db.cachedScores, db.cachedPlayers, db.cachedDownloads, db.cachedMessages],
     async () => {
       await Promise.all([
         db.cachedTournaments.clear(),
@@ -131,6 +132,7 @@ export async function clearPrivateCache(): Promise<void> {
         db.cachedScores.clear(),
         db.cachedPlayers.clear(),
         db.cachedDownloads.clear(),
+        db.cachedMessages.clear(),
       ]);
     },
   );
@@ -146,7 +148,7 @@ export async function clearPrivateCache(): Promise<void> {
 export async function removeCachedTournamentData(tournamentId: string): Promise<void> {
   await db.transaction(
     'rw',
-    [db.cachedTournaments, db.cachedMemberships, db.cachedTeams, db.cachedHoles, db.cachedScores, db.cachedPlayers, db.cachedDownloads],
+    [db.cachedTournaments, db.cachedMemberships, db.cachedTeams, db.cachedHoles, db.cachedScores, db.cachedPlayers, db.cachedDownloads, db.cachedMessages],
     async () => {
       await Promise.all([
         db.cachedTournaments.delete(tournamentId),
@@ -156,6 +158,7 @@ export async function removeCachedTournamentData(tournamentId: string): Promise<
         db.cachedScores.where('tournamentId').equals(tournamentId).delete(),
         db.cachedPlayers.where('tournamentId').equals(tournamentId).delete(),
         db.cachedDownloads.delete(tournamentId),
+        db.cachedMessages.where('tournamentId').equals(tournamentId).delete(),
       ]);
     },
   );
