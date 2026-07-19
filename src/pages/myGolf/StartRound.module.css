@@ -33,7 +33,14 @@
   margin-bottom: 0.5rem;
 }
 
-.chosen {
+/*
+ * Compound selector (two classes) so this always outranks the single-class
+ * .btn/.btn-secondary rules from index.css on specificity alone -- Vite's
+ * production CSS concatenation order is not guaranteed to put component
+ * styles after global ones, so a plain `.chosen { }` selector (same
+ * specificity as `.btn-secondary`) can silently lose the cascade.
+ */
+:global(.btn).chosen {
   background: var(--color-brand);
   color: var(--color-brand-contrast);
   border-color: var(--color-brand);

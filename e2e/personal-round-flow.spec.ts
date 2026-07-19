@@ -114,12 +114,32 @@ test('start a personal round, score it, finish it public, and see it on the Home
   await expect(page.getByText(fixture.clubName)).toBeVisible({ timeout: 10_000 });
   await page.getByText(fixture.clubName).first().click();
 
-  await expect(page.getByRole('button', { name: new RegExp(fixture.teeName) })).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: new RegExp(fixture.teeName) }).click();
+  await expect(page.getByRole('radio', { name: new RegExp(fixture.teeName) })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('radio', { name: new RegExp(fixture.teeName) }).click();
+
+  // Selecting a tee must be visibly obvious, not just a checkmark buried in
+  // the label -- a solid brand-green background + white text, not merely a
+  // border-color tweak (regression test for the cascade-order bug where the
+  // scoped .chosen rule silently lost to the global .btn-secondary rule).
+  const selectedTeeButton = page.getByRole('radio', { name: new RegExp(fixture.teeName) });
+  await expect(selectedTeeButton).toHaveAttribute('aria-checked', 'true');
+  await expect(selectedTeeButton).toHaveCSS('background-color', 'rgb(27, 94, 60)');
+  await expect(selectedTeeButton).toHaveCSS('color', 'rgb(255, 255, 255)');
 
   // 18-hole tee: the Play 18 / Front 9 / Back 9 choice appears.
-  await expect(page.getByRole('button', { name: 'Play 18' })).toBeVisible();
-  await page.getByRole('button', { name: 'Play 18' }).click();
+  const play18Button = page.getByRole('radio', { name: 'Play 18' });
+  const front9Button = page.getByRole('radio', { name: 'Front 9' });
+  await expect(play18Button).toBeVisible();
+  await play18Button.click();
+
+  await expect(play18Button).toHaveAttribute('aria-checked', 'true');
+  await expect(play18Button).toHaveCSS('background-color', 'rgb(27, 94, 60)');
+  await expect(play18Button).toHaveCSS('color', 'rgb(255, 255, 255)');
+  // The unselected sibling in the same group must stay unhighlighted (white
+  // background, not the selected green) -- confirms the state is scoped per
+  // button, not applied to the whole group.
+  await expect(front9Button).toHaveAttribute('aria-checked', 'false');
+  await expect(front9Button).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 
   await page.getByRole('button', { name: 'Start Round' }).click();
   await page.waitForURL('**/my-golf/round/**');
@@ -158,9 +178,9 @@ test('start a personal round, score it, finish it public, and see it on the Home
   await page.locator('button[class*="chip"]', { hasText: fixture.clubName }).click();
   await page.waitForURL('**/my-golf/start');
 
-  await expect(page.getByRole('button', { name: new RegExp(fixture.teeName) })).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: new RegExp(fixture.teeName) }).click();
-  await page.getByRole('button', { name: 'Play 18' }).click();
+  await expect(page.getByRole('radio', { name: new RegExp(fixture.teeName) })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('radio', { name: new RegExp(fixture.teeName) }).click();
+  await page.getByRole('radio', { name: 'Play 18' }).click();
   await page.getByRole('button', { name: 'Start Round' }).click();
   await page.waitForURL('**/my-golf/round/**');
 

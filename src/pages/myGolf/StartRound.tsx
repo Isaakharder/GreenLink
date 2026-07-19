@@ -103,6 +103,7 @@ export function StartRound() {
   }
 
   function handleSelectTee(tee: ImportedCourseTee) {
+    if (selectedTee?.id === tee.id) return;
     setSelectedTee(tee);
     if (tee.number_of_holes === 9) {
       setHoleCount(9);
@@ -137,7 +138,8 @@ export function StartRound() {
     setSubmitting(false);
 
     if (error) {
-      setSubmitError(error.message);
+      console.error('start_personal_round failed', error);
+      setSubmitError("We couldn't start your round. Please try again.");
       return;
     }
 
@@ -187,42 +189,57 @@ export function StartRound() {
           {availableTees.length === 0 && <p className="empty-state">No tee data available for this course.</p>}
 
           <h2 className="section-title">Choose a Tee</h2>
-          {availableTees.map((tee) => (
-            <button
-              key={tee.id}
-              type="button"
-              className={`btn btn-secondary btn-small ${styles.teeButton}`}
-              disabled={selectedTee?.id === tee.id}
-              onClick={() => handleSelectTee(tee)}
-            >
-              {selectedTee?.id === tee.id ? '✓ ' : ''}
-              {formatTeeSummary(tee)}
-            </button>
-          ))}
+          <div role="radiogroup" aria-label="Choose a tee">
+            {availableTees.map((tee) => {
+              const isSelected = selectedTee?.id === tee.id;
+              return (
+                <button
+                  key={tee.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  className={`btn btn-secondary btn-small ${styles.teeButton} ${isSelected ? styles.chosen : ''}`}
+                  onClick={() => handleSelectTee(tee)}
+                >
+                  {isSelected ? '✓ ' : ''}
+                  {formatTeeSummary(tee)}
+                </button>
+              );
+            })}
+          </div>
 
           {selectedTee && selectedTee.number_of_holes === 18 && (
             <>
               <h2 className="section-title">Holes</h2>
-              <div className={styles.chipRow}>
+              <div className={styles.chipRow} role="radiogroup" aria-label="Holes">
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={holeCount === 18}
                   className={`btn btn-secondary btn-small ${holeCount === 18 ? styles.chosen : ''}`}
                   onClick={() => handleChooseHoles(18, null)}
                 >
+                  {holeCount === 18 ? '✓ ' : ''}
                   Play 18
                 </button>
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={holeCount === 9 && nine === 'front'}
                   className={`btn btn-secondary btn-small ${holeCount === 9 && nine === 'front' ? styles.chosen : ''}`}
                   onClick={() => handleChooseHoles(9, 'front')}
                 >
+                  {holeCount === 9 && nine === 'front' ? '✓ ' : ''}
                   Front 9
                 </button>
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={holeCount === 9 && nine === 'back'}
                   className={`btn btn-secondary btn-small ${holeCount === 9 && nine === 'back' ? styles.chosen : ''}`}
                   onClick={() => handleChooseHoles(9, 'back')}
                 >
+                  {holeCount === 9 && nine === 'back' ? '✓ ' : ''}
                   Back 9
                 </button>
               </div>
@@ -232,17 +249,23 @@ export function StartRound() {
           {selectedTee && (
             <>
               <h2 className="section-title">Walking or Cart</h2>
-              <div className={styles.chipRow}>
-                {WALKING_OR_CART_OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={`btn btn-secondary btn-small ${walkingOrCart === option ? styles.chosen : ''}`}
-                    onClick={() => setWalkingOrCart(option)}
-                  >
-                    {WALKING_OR_CART_LABEL[option]}
-                  </button>
-                ))}
+              <div className={styles.chipRow} role="radiogroup" aria-label="Walking or cart">
+                {WALKING_OR_CART_OPTIONS.map((option) => {
+                  const isSelected = walkingOrCart === option;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      className={`btn btn-secondary btn-small ${isSelected ? styles.chosen : ''}`}
+                      onClick={() => setWalkingOrCart(option)}
+                    >
+                      {isSelected ? '✓ ' : ''}
+                      {WALKING_OR_CART_LABEL[option]}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}

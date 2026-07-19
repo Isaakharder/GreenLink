@@ -49,7 +49,12 @@
   margin-bottom: 0.5rem;
 }
 
-.chosen {
+/*
+ * Compound selector (two classes) so this always outranks the single-class
+ * .btn/.btn-secondary rules from index.css on specificity alone -- see
+ * StartRound.module.css for why source order can't be relied on here.
+ */
+:global(.btn).chosen {
   background: var(--color-brand);
   color: var(--color-brand-contrast);
   border-color: var(--color-brand);

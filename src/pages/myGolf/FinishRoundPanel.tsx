@@ -106,8 +106,10 @@ export function FinishRoundPanel({ access, onClose, onFinished }: FinishRoundPan
               key={option}
               type="button"
               className={`btn btn-secondary btn-small ${visibility === option ? styles.chosen : ''}`}
+              aria-pressed={visibility === option}
               onClick={() => setVisibility(option)}
             >
+              {visibility === option ? '✓ ' : ''}
               {VISIBILITY_LABEL[option]}
             </button>
           ))}
