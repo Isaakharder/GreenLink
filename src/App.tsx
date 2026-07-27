@@ -8,6 +8,9 @@ import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
 import { Home } from './pages/Home';
 import { Profile } from './pages/Profile';
+import { Settings } from './pages/settings/Settings';
+import { CourseLibrary } from './pages/settings/CourseLibrary';
+import { CourseForm } from './pages/settings/CourseForm';
 import { MyGolf } from './pages/MyGolf';
 import { StartRound } from './pages/myGolf/StartRound';
 import { PersonalRoundShell } from './pages/myGolf/PersonalRoundShell';
@@ -52,6 +55,10 @@ export function App() {
                 <Route index element={<ScorecardTab />} />
               </Route>
               <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/settings/courses" element={<CourseLibrary />} />
+              <Route path="/settings/courses/new" element={<CourseForm />} />
+              <Route path="/settings/courses/:courseId/edit" element={<CourseForm />} />
 
               <Route path="/tournaments" element={<TournamentsPage />} />
               <Route path="/tournaments/new" element={<CreateTournament />} />

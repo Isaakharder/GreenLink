@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { supabase } from '../lib/supabaseClient';
 import { db } from '../lib/db';
@@ -55,6 +56,10 @@ export function Profile() {
         <p className={styles.username}>@{profile?.username}</p>
         <p className={styles.email}>{user?.email}</p>
       </div>
+
+      <Link to="/settings" className="btn btn-secondary">
+        Settings
+      </Link>
 
       {confirmingSignOut ? (
         <div className="card">

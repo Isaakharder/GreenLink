@@ -5,6 +5,9 @@ import type { GolfCourseTee } from '../types/database';
 // the GolfCourseAPI key exists. The frontend never talks to GolfCourseAPI
 // directly and never sees the key.
 
+export type ScorecardStatus = 'usable' | 'unusable' | 'unknown';
+export type CourseSearchSource = 'golfcourseapi' | 'manual' | 'imported';
+
 export interface CourseSearchResult {
   externalId: string;
   clubName: string;
@@ -12,6 +15,13 @@ export interface CourseSearchResult {
   city: string | null;
   state: string | null;
   country: string | null;
+  scorecardStatus: ScorecardStatus;
+  source: CourseSearchSource;
+}
+
+/** Small, non-distracting source label for a search result -- "GreenLink Course" covers both manual and bulk-imported library courses, since the distinction isn't meaningful to the end user. */
+export function formatCourseSourceLabel(source: CourseSearchSource): string {
+  return source === 'golfcourseapi' ? 'GolfCourseAPI' : 'GreenLink Course';
 }
 
 export type ImportedCourseTee = Pick<
@@ -126,4 +136,28 @@ export function formatTeeSummary(tee: ImportedCourseTee): string {
     tee.course_rating !== null && tee.slope_rating !== null ? `${tee.course_rating}/${tee.slope_rating}` : null,
   ].filter((part): part is string => !!part);
   return parts.join(' · ');
+}
+
+// A course is usable once imported if it has at least one tee -- the Edge
+// Function's flattenTees()/isTeeUsable() already filtered out any tee that
+// isn't a real, fully-scored 9 or 18 holes before returning it, so no
+// further checking is needed client-side.
+export function hasUsableTee(tees: ImportedCourseTee[]): boolean {
+  return tees.length > 0;
+}
+
+// Session-lifetime memory of GolfCourseAPI course ids confirmed to have no
+// usable scorecard, so re-selecting the same search result (e.g. after
+// "Choose Another Course" and coming back) shows the same verdict instantly
+// instead of importing it again. Deliberately module-scoped, not persisted
+// -- it exists only to avoid redundant network calls within one session,
+// not as a cache of record (the DB/GolfCourseAPI remain the source of truth).
+const unusableCourseIds = new Set<string>();
+
+export function markCourseUnusable(externalId: string): void {
+  unusableCourseIds.add(externalId);
+}
+
+export function isKnownUnusable(externalId: string): boolean {
+  return unusableCourseIds.has(externalId);
 }

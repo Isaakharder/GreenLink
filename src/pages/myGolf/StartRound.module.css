@@ -45,3 +45,22 @@
   color: var(--color-brand-contrast);
   border-color: var(--color-brand);
 }
+
+.manualHoleRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.manualHoleRow .field {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.manualHoleNumber {
+  font-weight: 700;
+  font-size: 0.85rem;
+  min-width: 3.25rem;
+  padding-bottom: 0.75rem;
+}

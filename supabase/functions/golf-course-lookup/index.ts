@@ -8,10 +8,13 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
   flattenTees,
+  fromLocalCourseSearchRow,
+  mergeCourseSearchResults,
   toGolfCourseRow,
   toGolfCourseTeeHoleRows,
   toGolfCourseTeeRow,
   toSearchSummary,
+  type LocalCourseSearchRow,
 } from './mapping.ts';
 import { GolfCourseApiError, getCourseDetail, searchCourses } from './golfCourseApiClient.ts';
 
@@ -51,14 +54,51 @@ async function requireUserId(req: Request): Promise<string> {
   return data.user.id;
 }
 
+// GreenLink's own course library (manual + future bulk-imported courses,
+// supabase/migrations/0027) -- searched via search_courses() so it's
+// matched the same way GolfCourseAPI results are (club/course name, city,
+// state, country) and ranked ahead of them. Failure here degrades to
+// GolfCourseAPI-only results rather than failing the whole search --
+// GreenLink's own library being briefly unreachable shouldn't take down
+// course search entirely.
+async function searchLocalCourses(query: string) {
+  try {
+    const db = serviceRoleClient();
+    const { data, error } = await db.rpc('search_courses', { p_query: query, p_limit: 20 });
+    if (error) throw error;
+    return ((data ?? []) as LocalCourseSearchRow[]).map(fromLocalCourseSearchRow);
+  } catch (err) {
+    console.error('golf-course-lookup: search_courses failed, continuing with GolfCourseAPI results only', err);
+    return [];
+  }
+}
+
 async function handleSearch(query: string): Promise<Response> {
   const trimmed = query.trim();
   if (trimmed.length < 2) {
     return json({ results: [] });
   }
 
-  const response = await searchCourses(trimmed);
-  return json({ results: response.courses.map(toSearchSummary) });
+  // Run both concurrently, but GolfCourseAPI being rate-limited, down, or
+  // misconfigured must never hide the user's own GreenLink course library
+  // -- that's local, always-reliable data. Only propagate the
+  // GolfCourseApiError (the friendly, specific message the frontend
+  // already renders) when the local library search *also* found nothing,
+  // so a real API outage doesn't look like a silent empty search when
+  // local results could have answered it on their own.
+  const [localOutcome, apiOutcome] = await Promise.allSettled([searchLocalCourses(trimmed), searchCourses(trimmed)]);
+  const localResults = localOutcome.status === 'fulfilled' ? localOutcome.value : [];
+
+  if (apiOutcome.status === 'rejected') {
+    if (localResults.length > 0) {
+      console.error('golf-course-lookup: GolfCourseAPI search failed, continuing with GreenLink library results only', apiOutcome.reason);
+      return json({ results: mergeCourseSearchResults(localResults, []) });
+    }
+    throw apiOutcome.reason;
+  }
+
+  const apiResults = apiOutcome.value.courses.map(toSearchSummary);
+  return json({ results: mergeCourseSearchResults(localResults, apiResults) });
 }
 
 async function handleImport(externalId: string, importedBy: string): Promise<Response> {
@@ -74,10 +114,14 @@ async function handleImport(externalId: string, importedBy: string): Promise<Res
   if (existingError) throw existingError;
 
   if (existingCourse) {
+    // archived_at is null: a tee superseded by an edit (see
+    // replace_manual_course_tees(), 0027) must never be re-offered for a
+    // new round -- its replacement, if any, is what should be selectable.
     const { data: tees, error: teesError } = await db
       .from('golf_course_tees')
       .select('id, tee_name, gender, number_of_holes, par_total, course_rating, slope_rating')
-      .eq('golf_course_id', existingCourse.id);
+      .eq('golf_course_id', existingCourse.id)
+      .is('archived_at', null);
     if (teesError) throw teesError;
     return json({ course: existingCourse, tees: tees ?? [] });
   }

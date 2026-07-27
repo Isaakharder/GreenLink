@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { formatCourseLocation, searchGolfCourses, GolfCourseSearchError, type CourseSearchResult } from '../lib/golfCourseApi';
+import {
+  formatCourseLocation,
+  formatCourseSourceLabel,
+  searchGolfCourses,
+  GolfCourseSearchError,
+  type CourseSearchResult,
+} from '../lib/golfCourseApi';
 import styles from './CourseSearchField.module.css';
 
 interface CourseSearchFieldProps {
@@ -83,17 +89,27 @@ export function CourseSearchField({ label, onSelect }: CourseSearchFieldProps) {
 
       {results.length > 0 && (
         <ul className={styles.results}>
-          {results.map((result) => (
-            <li key={result.externalId}>
-              <button type="button" className={styles.resultButton} onClick={() => handleSelect(result)}>
-                <span className={styles.resultTitle}>{result.clubName}</span>
-                <span className={styles.resultMeta}>
-                  {result.courseName}
-                  {formatCourseLocation(result) && ` · ${formatCourseLocation(result)}`}
-                </span>
-              </button>
-            </li>
-          ))}
+          {results.map((result) => {
+            const unusable = result.scorecardStatus === 'unusable';
+            return (
+              <li key={result.externalId}>
+                <button
+                  type="button"
+                  className={`${styles.resultButton} ${unusable ? styles.resultUnusable : ''}`}
+                  onClick={() => handleSelect(result)}
+                >
+                  <span className={styles.resultTitle}>{result.clubName}</span>
+                  <span className={styles.resultMeta}>
+                    {result.courseName}
+                    {formatCourseLocation(result) && ` · ${formatCourseLocation(result)}`}
+                    {' · '}
+                    <span className={styles.sourceLabel}>{formatCourseSourceLabel(result.source)}</span>
+                  </span>
+                  {unusable && <span className={`badge badge-declined ${styles.resultBadge}`}>Scorecard data unavailable</span>}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

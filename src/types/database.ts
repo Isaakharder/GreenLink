@@ -102,7 +102,7 @@ export interface GolfCourse {
   raw_payload: unknown;
 }
 
-export type GolfCourseTeeGender = 'male' | 'female';
+export type GolfCourseTeeGender = 'male' | 'female' | 'unisex';
 
 export interface GolfCourseTee {
   id: string;

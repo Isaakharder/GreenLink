@@ -1,12 +1,16 @@
 -- ============================================================================
--- pgTAP suite for My Golf personal rounds (supabase/migrations/0024).
+-- pgTAP suite for My Golf personal rounds (supabase/migrations/0024, 0026).
 -- Covers: start_personal_round()/finish_personal_round() happy paths and
 -- rejections, is_public_personal_round() truth table, cross-user RLS
 -- isolation (private rounds invisible to another user, public+completed
--- rounds visible), and get_public_round_feed()/get_my_golf_stats()
--- correctness. Same fixture/impersonation pattern as
--- tournament_setup_rules.sql / live_scoring_rules.sql. Creates its own
--- throwaway users/course/rounds and rolls back at the end.
+-- rounds visible), get_public_round_feed()/get_my_golf_stats() correctness,
+-- and start_personal_round()'s manual-scorecard path (0026) -- the
+-- GolfCourseAPI-has-no-tee-data fallback -- including that it rejects the
+-- same malformed input save_tournament_holes() always has (wrong hole
+-- count, duplicate hole numbers, a hole missing par). Same fixture/
+-- impersonation pattern as tournament_setup_rules.sql / live_scoring_
+-- rules.sql. Creates its own throwaway users/course/rounds and rolls back
+-- at the end.
 --
 -- Run with: supabase test db
 -- ============================================================================
@@ -16,7 +20,7 @@ begin;
 create extension if not exists pgtap;
 create extension if not exists pgcrypto;
 
-select plan(33);
+select plan(47);
 
 create temp table fixtures (key text primary key, value text);
 
@@ -410,6 +414,158 @@ select is(
   ((public.get_my_golf_stats() ->> 'rounds_played')::int),
   2,
   'both rounds still count toward the player''s own stats regardless of visibility'
+);
+
+reset role;
+
+-- ---------------------------------------------------------------------------
+-- 10) start_personal_round() manual-scorecard path (0026): the alternative
+--     to p_tee_id for a GolfCourseAPI course found by search but missing
+--     usable tee/hole data. Reuses save_tournament_holes() (0016), so every
+--     validation rule it already enforces (exact hole count, sequential
+--     1..N numbering, no duplicates, par 3-6) applies identically here.
+-- ---------------------------------------------------------------------------
+
+do $$
+begin
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', '20000000-0000-0000-0000-000000000001', 'role', 'authenticated')::text, true);
+  set local role authenticated;
+end $$;
+
+select ok(
+  pg_temp.expect_exception(
+    format('select public.start_personal_round(%L, current_date, 18, null, null, %L, null, null, null)',
+      'Manual Course', 'walking')
+  ),
+  'start_personal_round rejects when neither a tee nor manual holes are provided'
+);
+
+select ok(
+  pg_temp.expect_exception(
+    format(
+      'select public.start_personal_round(%L, current_date, 9, %L, null, %L, %L::jsonb, null, null)',
+      'Manual Course', '30000000-0000-0000-0000-000000000002', 'walking',
+      '[{"hole_number":1,"par":4}]'
+    )
+  ),
+  'start_personal_round rejects when both a tee and manual holes are provided'
+);
+
+-- Happy path: manual 9-hole scorecard, with optional yardage/rating/slope.
+do $$
+declare
+  v_round_id uuid;
+  v_holes jsonb := '[
+    {"hole_number":1,"par":4,"distance":350},
+    {"hole_number":2,"par":3,"distance":150},
+    {"hole_number":3,"par":5,"distance":500},
+    {"hole_number":4,"par":4},
+    {"hole_number":5,"par":4},
+    {"hole_number":6,"par":3},
+    {"hole_number":7,"par":5},
+    {"hole_number":8,"par":4},
+    {"hole_number":9,"par":4}
+  ]'::jsonb;
+begin
+  v_round_id := public.start_personal_round(
+    'Deer Run Golf Club — Buck/Doe (Members)', current_date, 9,
+    null, null, 'cart', v_holes, 71.2, 122
+  );
+  perform pg_temp.remember('manual_round_9', v_round_id::text);
+end $$;
+
+select ok(
+  (select is_personal from public.tournaments where id = pg_temp.recall('manual_round_9')::uuid),
+  'a manual 9-hole round is created as a personal round'
+);
+
+select is(
+  (select status from public.tournaments where id = pg_temp.recall('manual_round_9')::uuid),
+  'live',
+  'a manual round is left live and ready to score, same as an imported one'
+);
+
+select is(
+  (select count(*) from public.tournament_holes where tournament_id = pg_temp.recall('manual_round_9')::uuid),
+  9::bigint,
+  'exactly 9 holes were written for a manual 9-hole scorecard -- no fabricated holes'
+);
+
+select is(
+  (select par from public.tournament_holes where tournament_id = pg_temp.recall('manual_round_9')::uuid and hole_number = 3),
+  5,
+  'manually-entered par is stored exactly as entered'
+);
+
+select is(
+  (select distance from public.tournament_holes where tournament_id = pg_temp.recall('manual_round_9')::uuid and hole_number = 4),
+  null::integer,
+  'omitted yardage is stored as null, never a fabricated value'
+);
+
+select is(
+  (select course_rating from public.tournaments where id = pg_temp.recall('manual_round_9')::uuid),
+  71.2,
+  'manually-entered course rating is stored'
+);
+
+select is(
+  (select slope_rating from public.tournaments where id = pg_temp.recall('manual_round_9')::uuid),
+  122::numeric,
+  'manually-entered slope rating is stored'
+);
+
+-- Happy path: manual 18-hole scorecard, rating/slope both omitted.
+do $$
+declare
+  v_round_id uuid;
+  v_holes jsonb;
+begin
+  select jsonb_agg(jsonb_build_object('hole_number', n, 'par', 4)) into v_holes from generate_series(1, 18) as n;
+  v_round_id := public.start_personal_round(
+    'Manual Course', current_date, 18,
+    null, null, 'walking', v_holes, null, null
+  );
+  perform pg_temp.remember('manual_round_18', v_round_id::text);
+end $$;
+
+select is(
+  (select count(*) from public.tournament_holes where tournament_id = pg_temp.recall('manual_round_18')::uuid),
+  18::bigint,
+  'exactly 18 holes were written for a manual 18-hole scorecard'
+);
+
+select is(
+  (select course_rating from public.tournaments where id = pg_temp.recall('manual_round_18')::uuid),
+  null::numeric,
+  'course rating stays null when not provided -- never invented'
+);
+
+-- Rejections: save_tournament_holes()'s existing validation applies unchanged.
+
+select ok(
+  pg_temp.expect_exception(
+    format('select public.start_personal_round(%L, current_date, 18, null, null, %L, %L::jsonb, null, null)',
+      'Manual Course', 'walking', '[{"hole_number":1,"par":4},{"hole_number":2,"par":4}]')
+  ),
+  'a manual scorecard with the wrong number of holes for the requested hole count is rejected'
+);
+
+select ok(
+  pg_temp.expect_exception(
+    format('select public.start_personal_round(%L, current_date, 2, null, null, %L, %L::jsonb, null, null)',
+      'Manual Course', 'walking', '[{"hole_number":1,"par":4},{"hole_number":1,"par":5}]')
+  ),
+  'a manual scorecard with duplicate hole numbers is rejected'
+);
+
+select ok(
+  pg_temp.expect_exception(
+    format('select public.start_personal_round(%L, current_date, 2, null, null, %L, %L::jsonb, null, null)',
+      'Manual Course', 'walking', '[{"hole_number":1,"par":4},{"hole_number":2}]')
+  ),
+  'a manual scorecard with a hole missing a par is rejected'
 );
 
 reset role;

@@ -22,6 +22,14 @@ export interface GolfCourseApiSearchResult {
   club_name: string;
   course_name: string;
   location?: GolfCourseApiLocation | null;
+  // GolfCourseAPI's real /v1/search response includes each course's full
+  // tee/hole data (see golfCourseApiClient.ts) -- typed optional here
+  // defensively, so a result missing this field (an API change, or a
+  // provider quirk) degrades to 'unknown' rather than a wrong guess.
+  tees?: {
+    male?: GolfCourseApiTee[] | null;
+    female?: GolfCourseApiTee[] | null;
+  } | null;
 }
 
 export interface GolfCourseApiSearchResponse {
@@ -55,10 +63,45 @@ export interface GolfCourseApiCourseDetail {
 }
 
 // ---------------------------------------------------------------------------
+// Usable-tee determination -- shared by search-result marking and the
+// import path's own tee filtering, so both agree on what "usable" means: a
+// tee GreenLink's scoring engine can actually run a round on (9 or 18
+// holes, every hole has a real par). Rating/slope/yardage/gender stay
+// optional -- the scoring system doesn't need them.
+// ---------------------------------------------------------------------------
+
+export function isTeeUsable(tee: GolfCourseApiTee): boolean {
+  if (tee.holes.length !== 9 && tee.holes.length !== 18) return false;
+  return tee.holes.every((hole) => typeof hole.par === 'number' && Number.isFinite(hole.par) && hole.par > 0);
+}
+
+export function hasUsableTees(tees: GolfCourseApiCourseDetail['tees'] | undefined | null): boolean {
+  const male = tees?.male ?? [];
+  const female = tees?.female ?? [];
+  return [...male, ...female].some(isTeeUsable);
+}
+
+export type ScorecardStatus = 'usable' | 'unusable' | 'unknown';
+
+/**
+ * Best-effort usability signal from a *search* result. GolfCourseAPI's real
+ * /v1/search response includes each course's tee data (confirmed against
+ * production), but this stays defensive: if `tees` is altogether absent
+ * from a given result, that's 'unknown' -- never a false 'unusable' label
+ * on a course GreenLink simply couldn't check yet.
+ */
+export function scorecardStatusFromSearchResult(course: GolfCourseApiSearchResult): ScorecardStatus {
+  if (course.tees === undefined) return 'unknown';
+  return hasUsableTees(course.tees) ? 'usable' : 'unusable';
+}
+
+// ---------------------------------------------------------------------------
 // Search results -> frontend display summary. Enough to distinguish
 // similarly-named courses (club name, course name, city/state/country) per
 // requirement 3, without leaking the raw API payload to the client.
 // ---------------------------------------------------------------------------
+
+export type CourseSearchSource = 'golfcourseapi' | 'manual' | 'imported';
 
 export interface CourseSearchSummary {
   externalId: string;
@@ -67,6 +110,8 @@ export interface CourseSearchSummary {
   city: string | null;
   state: string | null;
   country: string | null;
+  scorecardStatus: ScorecardStatus;
+  source: CourseSearchSource;
 }
 
 export function toSearchSummary(course: GolfCourseApiSearchResult): CourseSearchSummary {
@@ -77,7 +122,68 @@ export function toSearchSummary(course: GolfCourseApiSearchResult): CourseSearch
     city: course.location?.city ?? null,
     state: course.location?.state ?? null,
     country: course.location?.country ?? null,
+    scorecardStatus: scorecardStatusFromSearchResult(course),
+    source: 'golfcourseapi',
   };
+}
+
+// ---------------------------------------------------------------------------
+// GreenLink's own course library (search_courses() RPC, supabase/migrations/
+// 0027) -> the same CourseSearchSummary shape GolfCourseAPI results use, so
+// the frontend renders both identically (plus a small source label) and
+// merge/dedupe logic below can treat them uniformly.
+// ---------------------------------------------------------------------------
+
+export interface LocalCourseSearchRow {
+  id: string;
+  external_id: string;
+  club_name: string;
+  course_name: string;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  source: string;
+  has_usable_tee: boolean;
+}
+
+export function fromLocalCourseSearchRow(row: LocalCourseSearchRow): CourseSearchSummary {
+  return {
+    externalId: row.external_id,
+    clubName: row.club_name,
+    courseName: row.course_name,
+    city: row.city,
+    state: row.state,
+    country: row.country,
+    scorecardStatus: row.has_usable_tee ? 'usable' : 'unusable',
+    source: row.source === 'imported' ? 'imported' : 'manual',
+  };
+}
+
+function normalizeForMatch(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function courseMatchKey(course: Pick<CourseSearchSummary, 'clubName' | 'courseName'>): string {
+  return `${normalizeForMatch(course.clubName)}|${normalizeForMatch(course.courseName)}`;
+}
+
+/**
+ * Merges GreenLink's own course library results ahead of GolfCourseAPI's
+ * (local/exact GreenLink matches rank first), dropping an API result only
+ * when it's a *reliable* duplicate of a local one -- exact, case-
+ * insensitive club name + course name match, never a fuzzy guess -- and
+ * only when the API record has no usable tees while the local one does
+ * (prefer the complete GreenLink record). If the API result is itself
+ * usable, both are kept and left clearly distinguishable by source rather
+ * than silently merged or hidden.
+ */
+export function mergeCourseSearchResults(local: CourseSearchSummary[], api: CourseSearchSummary[]): CourseSearchSummary[] {
+  const localKeys = new Set(local.map(courseMatchKey));
+  const filteredApi = api.filter((apiCourse) => {
+    if (!localKeys.has(courseMatchKey(apiCourse))) return true;
+    return apiCourse.scorecardStatus !== 'unusable';
+  });
+  return [...local, ...filteredApi];
 }
 
 // ---------------------------------------------------------------------------
@@ -113,11 +219,18 @@ export interface TeeInput {
   tee: GolfCourseApiTee;
 }
 
-/** Flattens tees.male/tees.female into one list, tagging each with gender. Tees with an unsupported hole count (not 9 or 18) are dropped rather than failing the whole import. */
+/**
+ * Flattens tees.male/tees.female into one list, tagging each with gender.
+ * Tees that aren't usable (see isTeeUsable(): wrong hole count, or any hole
+ * missing a real par) are dropped rather than failing the whole import --
+ * this also protects the DB insert below, since golf_course_tee_holes.par
+ * is NOT NULL and a raw API null would otherwise surface as an opaque
+ * internal_error instead of "this tee has no usable data".
+ */
 export function flattenTees(detail: GolfCourseApiCourseDetail): TeeInput[] {
   const male = (detail.tees?.male ?? []).map((tee) => ({ gender: 'male' as const, tee }));
   const female = (detail.tees?.female ?? []).map((tee) => ({ gender: 'female' as const, tee }));
-  return [...male, ...female].filter(({ tee }) => tee.holes.length === 9 || tee.holes.length === 18);
+  return [...male, ...female].filter(({ tee }) => isTeeUsable(tee));
 }
 
 export interface GolfCourseTeeRow {

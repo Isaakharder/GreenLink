@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
   flattenTees,
+  fromLocalCourseSearchRow,
+  hasUsableTees,
+  isTeeUsable,
+  mergeCourseSearchResults,
+  scorecardStatusFromSearchResult,
   toGolfCourseRow,
   toGolfCourseTeeHoleRows,
   toGolfCourseTeeRow,
   toSearchSummary,
+  type CourseSearchSummary,
   type GolfCourseApiCourseDetail,
+  type GolfCourseApiSearchResult,
   type GolfCourseApiTee,
+  type LocalCourseSearchRow,
 } from './mapping';
 
 describe('toSearchSummary', () => {
@@ -24,6 +32,8 @@ describe('toSearchSummary', () => {
       city: 'Pinehurst',
       state: 'NC',
       country: 'USA',
+      scorecardStatus: 'unknown',
+      source: 'golfcourseapi',
     });
   });
 
@@ -59,6 +69,92 @@ const eighteenHoleTee: GolfCourseApiTee = {
   holes: Array.from({ length: 18 }, (_, i) => ({ par: 4, yardage: 380 + i, handicap: i + 1 })),
 };
 
+const nineHoleTee: GolfCourseApiTee = {
+  tee_name: 'White',
+  course_rating: 35.2,
+  slope_rating: 120,
+  par_total: 36,
+  number_of_holes: 9,
+  holes: Array.from({ length: 9 }, (_, i) => ({ par: 4, yardage: 350 + i, handicap: i + 1 })),
+};
+
+describe('isTeeUsable', () => {
+  it('accepts a fully-scored 18-hole tee', () => {
+    expect(isTeeUsable(eighteenHoleTee)).toBe(true);
+  });
+
+  it('accepts a fully-scored 9-hole tee', () => {
+    expect(isTeeUsable(nineHoleTee)).toBe(true);
+  });
+
+  it('accepts a tee with null rating/slope/par_total as long as every hole has a real par', () => {
+    const tee: GolfCourseApiTee = { ...eighteenHoleTee, course_rating: null, slope_rating: null, par_total: null };
+    expect(isTeeUsable(tee)).toBe(true);
+  });
+
+  it('rejects a tee with zero holes (e.g. GolfCourseAPI returned an empty holes array)', () => {
+    expect(isTeeUsable({ ...eighteenHoleTee, holes: [] })).toBe(false);
+  });
+
+  it('rejects a tee whose hole count is neither 9 nor 18', () => {
+    expect(isTeeUsable({ ...eighteenHoleTee, holes: eighteenHoleTee.holes.slice(0, 14) })).toBe(false);
+  });
+
+  it('rejects a tee where any hole is missing a real par', () => {
+    const holesWithNullPar = eighteenHoleTee.holes.map((hole, i) =>
+      i === 5 ? { ...hole, par: null as unknown as number } : hole,
+    );
+    expect(isTeeUsable({ ...eighteenHoleTee, holes: holesWithNullPar })).toBe(false);
+  });
+
+  it('rejects a tee where a hole has a zero or negative par', () => {
+    const holesWithZeroPar = eighteenHoleTee.holes.map((hole, i) => (i === 0 ? { ...hole, par: 0 } : hole));
+    expect(isTeeUsable({ ...eighteenHoleTee, holes: holesWithZeroPar })).toBe(false);
+  });
+});
+
+describe('hasUsableTees', () => {
+  it('is true when only male tees are usable (female-tee-less course)', () => {
+    expect(hasUsableTees({ male: [eighteenHoleTee] })).toBe(true);
+  });
+
+  it('is true when only female tees are usable (male-tee-less course)', () => {
+    expect(hasUsableTees({ female: [eighteenHoleTee] })).toBe(true);
+  });
+
+  it('is false for the Deer Run Golf Club "Buck/Doe" shape confirmed against production: tees is an empty object', () => {
+    // Real cached raw_payload for external_id 5747 (verified live against
+    // GolfCourseAPI during this investigation): `"tees": {}` -- no male key,
+    // no female key at all.
+    expect(hasUsableTees({})).toBe(false);
+  });
+
+  it('is false when tees is entirely absent', () => {
+    expect(hasUsableTees(undefined)).toBe(false);
+    expect(hasUsableTees(null)).toBe(false);
+  });
+
+  it('is false when every tee present has no usable holes', () => {
+    expect(hasUsableTees({ male: [{ ...eighteenHoleTee, holes: [] }] })).toBe(false);
+  });
+});
+
+describe('scorecardStatusFromSearchResult', () => {
+  const base: GolfCourseApiSearchResult = { id: 1, club_name: 'Club', course_name: 'Course' };
+
+  it('is "unknown" when the search result carries no tees field at all (defensive default)', () => {
+    expect(scorecardStatusFromSearchResult(base)).toBe('unknown');
+  });
+
+  it('is "usable" when the search result includes at least one usable tee', () => {
+    expect(scorecardStatusFromSearchResult({ ...base, tees: { male: [eighteenHoleTee] } })).toBe('usable');
+  });
+
+  it('is "unusable" when the search result explicitly has an empty tees object', () => {
+    expect(scorecardStatusFromSearchResult({ ...base, tees: {} })).toBe('unusable');
+  });
+});
+
 describe('flattenTees', () => {
   it('tags male and female tees with their gender and combines them into one list', () => {
     const detail: GolfCourseApiCourseDetail = {
@@ -76,6 +172,24 @@ describe('flattenTees', () => {
     expect(flattened[1].gender).toBe('female');
   });
 
+  it('keeps a male-only course usable', () => {
+    const detail: GolfCourseApiCourseDetail = { id: 1, club_name: 'Club', course_name: 'Course', tees: { male: [eighteenHoleTee] } };
+    expect(flattenTees(detail)).toHaveLength(1);
+  });
+
+  it('keeps a female-only course usable', () => {
+    const detail: GolfCourseApiCourseDetail = { id: 1, club_name: 'Club', course_name: 'Course', tees: { female: [eighteenHoleTee] } };
+    const flattened = flattenTees(detail);
+    expect(flattened).toHaveLength(1);
+    expect(flattened[0].gender).toBe('female');
+  });
+
+  it('keeps a tee with null rating/slope as long as its holes have real pars -- optional fields are never a reason to drop real data', () => {
+    const tee: GolfCourseApiTee = { ...eighteenHoleTee, course_rating: null, slope_rating: null, par_total: null };
+    const detail: GolfCourseApiCourseDetail = { id: 1, club_name: 'Club', course_name: 'Course', tees: { male: [tee] } };
+    expect(flattenTees(detail)).toHaveLength(1);
+  });
+
   it('drops tees whose hole count is neither 9 nor 18 instead of failing the whole import', () => {
     const malformedTee: GolfCourseApiTee = { ...eighteenHoleTee, holes: eighteenHoleTee.holes.slice(0, 14) };
     const detail: GolfCourseApiCourseDetail = {
@@ -87,8 +201,37 @@ describe('flattenTees', () => {
     expect(flattenTees(detail)).toHaveLength(1);
   });
 
+  it('drops a tee that has tee metadata but a zero-length holes array (tees present, no holes)', () => {
+    const detail: GolfCourseApiCourseDetail = {
+      id: 1,
+      club_name: 'Club',
+      course_name: 'Course',
+      tees: { male: [{ ...eighteenHoleTee, holes: [] }] },
+    };
+    expect(flattenTees(detail)).toEqual([]);
+  });
+
   it('handles a course with no tees at all', () => {
     expect(flattenTees({ id: 1, club_name: 'Club', course_name: 'Course' })).toEqual([]);
+  });
+
+  it('handles the real Deer Run Golf Club "Buck/Doe" shape: tees present as an empty object, not null/undefined', () => {
+    const detail: GolfCourseApiCourseDetail = {
+      id: 5747,
+      club_name: 'Deer Run Golf Club',
+      course_name: 'Buck/Doe',
+      location: { city: 'Blenheim', state: 'ON', country: 'Canada' },
+      tees: {},
+    };
+    expect(flattenTees(detail)).toEqual([]);
+  });
+
+  it('never invents a tee or hole that was not present in the input', () => {
+    const detail: GolfCourseApiCourseDetail = { id: 1, club_name: 'Club', course_name: 'Course', tees: { male: [eighteenHoleTee] } };
+    const flattened = flattenTees(detail);
+    expect(flattened).toHaveLength(1);
+    expect(flattened[0].tee.holes).toHaveLength(18);
+    expect(flattened[0].tee.holes).toEqual(eighteenHoleTee.holes);
   });
 });
 
@@ -112,5 +255,102 @@ describe('toGolfCourseTeeHoleRows', () => {
     expect(rows).toHaveLength(18);
     expect(rows[0]).toEqual({ hole_number: 1, par: 4, yardage: 380, handicap: 1 });
     expect(rows[17]).toEqual({ hole_number: 18, par: 4, yardage: 397, handicap: 18 });
+  });
+});
+
+const localRow: LocalCourseSearchRow = {
+  id: 'course-1',
+  external_id: 'manual-course-1',
+  club_name: 'Deer Run Golf Club',
+  course_name: 'Buck/Doe',
+  city: 'Blenheim',
+  state: 'ON',
+  country: 'Canada',
+  source: 'manual',
+  has_usable_tee: true,
+};
+
+describe('fromLocalCourseSearchRow', () => {
+  it('maps a search_courses() row into the shared CourseSearchSummary shape', () => {
+    expect(fromLocalCourseSearchRow(localRow)).toEqual({
+      externalId: 'manual-course-1',
+      clubName: 'Deer Run Golf Club',
+      courseName: 'Buck/Doe',
+      city: 'Blenheim',
+      state: 'ON',
+      country: 'Canada',
+      scorecardStatus: 'usable',
+      source: 'manual',
+    });
+  });
+
+  it('maps has_usable_tee = false to scorecardStatus unusable', () => {
+    expect(fromLocalCourseSearchRow({ ...localRow, has_usable_tee: false }).scorecardStatus).toBe('unusable');
+  });
+
+  it('maps source "imported" through unchanged', () => {
+    expect(fromLocalCourseSearchRow({ ...localRow, source: 'imported' }).source).toBe('imported');
+  });
+});
+
+describe('mergeCourseSearchResults', () => {
+  const local: CourseSearchSummary = {
+    externalId: 'manual-1',
+    clubName: 'Deer Run Golf Club',
+    courseName: 'Buck/Doe',
+    city: 'Blenheim',
+    state: 'ON',
+    country: 'Canada',
+    scorecardStatus: 'usable',
+    source: 'manual',
+  };
+
+  it('ranks local GreenLink results ahead of GolfCourseAPI results', () => {
+    const api: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', clubName: 'Some Other Club' };
+    const merged = mergeCourseSearchResults([local], [api]);
+    expect(merged[0]).toBe(local);
+    expect(merged[1]).toBe(api);
+  });
+
+  it('drops an API duplicate when it has no usable tees and a local record already covers the same course (prefer the complete GreenLink record)', () => {
+    const incompleteApiDuplicate: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', scorecardStatus: 'unusable' };
+    const merged = mergeCourseSearchResults([local], [incompleteApiDuplicate]);
+    expect(merged).toEqual([local]);
+  });
+
+  it('keeps both when the API duplicate is also usable -- never silently merges, just lets the source label distinguish them', () => {
+    const usableApiDuplicate: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', scorecardStatus: 'usable' };
+    const merged = mergeCourseSearchResults([local], [usableApiDuplicate]);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((c) => c.source)).toEqual(['manual', 'golfcourseapi']);
+  });
+
+  it('matches duplicates case-insensitively and ignoring surrounding whitespace, but only on an exact club+course name pair', () => {
+    const sameCourseDifferentCase: CourseSearchSummary = {
+      ...local,
+      externalId: 'api-1',
+      source: 'golfcourseapi',
+      scorecardStatus: 'unusable',
+      clubName: '  deer run golf club  ',
+      courseName: 'BUCK/DOE',
+    };
+    expect(mergeCourseSearchResults([local], [sameCourseDifferentCase])).toEqual([local]);
+  });
+
+  it('never merges a merely-similar course name -- an unreliable match keeps both results', () => {
+    const similarButDifferentCourse: CourseSearchSummary = {
+      ...local,
+      externalId: 'api-1',
+      source: 'golfcourseapi',
+      scorecardStatus: 'unusable',
+      courseName: 'Doe/Fawn', // a real, distinct sibling layout at the same club (see investigation)
+    };
+    const merged = mergeCourseSearchResults([local], [similarButDifferentCourse]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it('keeps every API result when there is no local course at all', () => {
+    const api: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', scorecardStatus: 'unusable', clubName: 'Unrelated Club' };
+    expect(mergeCourseSearchResults([], [api])).toEqual([api]);
   });
 });

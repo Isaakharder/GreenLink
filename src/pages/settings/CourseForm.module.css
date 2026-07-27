@@ -1,0 +1,185 @@
+.wizard {
+  padding-bottom: 5.5rem; /* keeps content clear of the sticky save bar */
+}
+
+.stepper {
+  display: flex;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0.75rem 0 1.25rem;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  flex-wrap: wrap;
+}
+
+.stepDot {
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+}
+
+.stepDotCurrent {
+  border-color: var(--color-brand);
+  color: var(--color-brand-dark);
+  font-weight: 700;
+}
+
+.latLngRow {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.latLngRow .field {
+  flex: 1;
+}
+
+.meta {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin: 0.125rem 0;
+}
+
+.teeSummaryCard {
+  margin-bottom: 1rem;
+}
+
+.teeSummaryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.teeSummaryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.teeFieldsRow {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.teeFieldsRow .field {
+  flex: 1;
+}
+
+.teeEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.stepNavRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+/* ---- Current-hole card (mirrors ScorecardTab's hole card layout) ---- */
+
+.holeCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.holeCardHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.holeCardNumber {
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.holeCardOf {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.parLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin: 0 0 0.375rem;
+}
+
+.parButtons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.parButton {
+  min-height: var(--touch-target);
+  border-radius: var(--radius);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.parButtonSelected {
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-brand-contrast);
+}
+
+/* ---- Hole picker strip ---- */
+
+.pickerList {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.4rem;
+}
+
+.pickerItem {
+  min-height: var(--touch-target);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.pickerItemFilled {
+  border-color: #1b8a4a;
+  color: #1b8a4a;
+}
+
+.pickerItemCurrent {
+  border-color: var(--color-brand);
+  border-width: 2px;
+  color: var(--color-brand-dark);
+}
+
+/* ---- Sticky save bar ---- */
+
+.saveBar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+}
+
+.saveBar .btn {
+  flex: 1;
+}
