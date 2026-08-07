@@ -105,11 +105,21 @@ async function handleImport(externalId: string, importedBy: string): Promise<Res
   const db = serviceRoleClient();
 
   // Reuse: if this course was already imported by anyone, return the
-  // cached tees without ever calling GolfCourseAPI again.
+  // cached tees without ever calling GolfCourseAPI again. archived_at is
+  // null here on purpose (not just on the tees below): an archived
+  // golf_courses row (e.g. a known-broken duplicate cleaned up in 0030) is
+  // exactly the case where the cache must NOT be trusted -- GolfCourseAPI
+  // may have since started returning real data for that same external_id,
+  // and silently replaying old, empty cached tees for it would reproduce
+  // the Orchard View incident every time someone selects that result.
+  // Falling through to a fresh GolfCourseAPI fetch below and re-upserting
+  // (which also clears archived_at) is what lets that external_id recover
+  // once the upstream data does.
   const { data: existingCourse, error: existingError } = await db
     .from('golf_courses')
     .select('id, club_name, course_name, city, state, country')
     .eq('external_id', externalId)
+    .is('archived_at', null)
     .maybeSingle();
   if (existingError) throw existingError;
 
@@ -129,9 +139,23 @@ async function handleImport(externalId: string, importedBy: string): Promise<Res
   const detail = await getCourseDetail(externalId);
   const courseRow = toGolfCourseRow(detail);
 
+  // published_at: a golfcourseapi import has no draft/publish workflow (that's
+  // manual-course-only, see 0028) -- it's always immediately searchable, the
+  // same as every row before 0028 was, backfilled the same way in 0030. Not
+  // stamping this here was itself part of the Orchard View regression: it
+  // meant search_courses() could never find a course imported after 0028
+  // shipped, no matter how complete its data was.
+  // archived_at: null -- clears it if this external_id was previously
+  // archived (see the existingCourse lookup above). Refreshing raw_payload/
+  // city/etc from a fresh fetch and un-archiving in the same upsert is what
+  // lets a once-broken duplicate recover once GolfCourseAPI's own data for
+  // it does, instead of staying permanently archived.
   const { data: insertedCourse, error: insertCourseError } = await db
     .from('golf_courses')
-    .upsert({ ...courseRow, imported_by: importedBy }, { onConflict: 'external_id' })
+    .upsert(
+      { ...courseRow, imported_by: importedBy, published_at: new Date().toISOString(), archived_at: null },
+      { onConflict: 'external_id' },
+    )
     .select('id, club_name, course_name, city, state, country')
     .single();
   if (insertCourseError) throw insertCourseError;
@@ -141,12 +165,32 @@ async function handleImport(externalId: string, importedBy: string): Promise<Res
 
   for (const teeInput of teeInputs) {
     const teeRow = toGolfCourseTeeRow(teeInput);
-    const { data: insertedTee, error: teeError } = await db
+
+    // Not a plain .upsert({ onConflict: 'golf_course_id,tee_name,gender' }):
+    // 0027 replaced the unique constraint those three columns used to have
+    // with a *partial* unique index (golf_course_tees_current_name_gender_idx,
+    // `where archived_at is null`) so an archived predecessor never blocks
+    // re-adding a tee with the same name. Postgres' ON CONFLICT can't target
+    // a partial index by column list alone, so that upsert stopped matching
+    // any real constraint the moment 0027 shipped -- it would throw on the
+    // very first tee of any course whose golf_course_tees insert actually
+    // ran (a brand-new import, or -- as found while fixing the Orchard View
+    // incident -- a re-import of a previously-archived duplicate now that
+    // GolfCourseAPI returns real tee data for it again). Select-then-insert-
+    // or-update against the *current* tee explicitly instead.
+    const { data: currentTee } = await db
       .from('golf_course_tees')
-      .upsert(
-        { ...teeRow, golf_course_id: insertedCourse.id },
-        { onConflict: 'golf_course_id,tee_name,gender' },
-      )
+      .select('id')
+      .eq('golf_course_id', insertedCourse.id)
+      .eq('tee_name', teeRow.tee_name)
+      .eq('gender', teeRow.gender)
+      .is('archived_at', null)
+      .maybeSingle();
+
+    const teeQuery = currentTee
+      ? db.from('golf_course_tees').update(teeRow).eq('id', currentTee.id)
+      : db.from('golf_course_tees').insert({ ...teeRow, golf_course_id: insertedCourse.id });
+    const { data: insertedTee, error: teeError } = await teeQuery
       .select('id, tee_name, gender, number_of_holes, par_total, course_rating, slope_rating')
       .single();
     if (teeError) throw teeError;

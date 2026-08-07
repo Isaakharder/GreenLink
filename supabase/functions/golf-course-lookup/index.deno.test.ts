@@ -172,6 +172,65 @@ Deno.test('import happy path caches the course, tees, and holes', async () => {
   assert(detailRequests === 1, 'did not call GolfCourseAPI again for an already-cached course');
 });
 
+Deno.test('a freshly-imported course is stamped published_at so search_courses() can find it again -- regression test for the Orchard View incident, where an import created a row search could never see', async () => {
+  const externalId = `publish-check-${Date.now()}`;
+  mockHandler = (req) => {
+    const url = new URL(req.url);
+    if (url.pathname === `/v1/courses/${externalId}`) {
+      return Response.json({ course: courseDetailFixture(externalId) });
+    }
+    return new Response('not found', { status: 404 });
+  };
+
+  const res = await handleRequest(request('import', { externalId }, token));
+  assert(res.status === 200, `expected 200, got ${res.status}`);
+  const body = await res.json();
+
+  const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { data: courseRow } = await db.from('golf_courses').select('published_at, archived_at').eq('id', body.course.id).single();
+  assert(courseRow?.published_at != null, 'expected published_at to be stamped on import, not left null');
+  assert(courseRow?.archived_at == null, 'a freshly-imported course must not be archived');
+
+  const { data: searchRows } = await db.rpc('search_courses', { p_query: 'Pinehurst Resort', p_limit: 20 });
+  const found = (searchRows ?? []).some((row: { id: string }) => row.id === body.course.id);
+  assert(found, 'the freshly-imported course must be findable via search_courses() immediately, not only via GolfCourseAPI live search');
+});
+
+Deno.test('an archived duplicate is never served from cache -- re-importing it re-fetches from GolfCourseAPI and un-archives it once the upstream data is good', async () => {
+  const externalId = `archived-recovery-${Date.now()}`;
+  const db = createClient(SUPABASE_URL, SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+
+  // Simulate the exact Orchard View incident: a previously-imported,
+  // zero-tee, now-archived duplicate already sitting in golf_courses under
+  // this external_id (e.g. cleaned up the way 0030 archived the real
+  // broken row).
+  const { data: archivedCourse } = await db
+    .from('golf_courses')
+    .insert({ external_id: externalId, club_name: 'Archived Recovery Club', course_name: 'Archived Recovery Club', archived_at: new Date().toISOString(), published_at: new Date().toISOString() })
+    .select('id')
+    .single();
+
+  let detailRequests = 0;
+  mockHandler = (req) => {
+    const url = new URL(req.url);
+    if (url.pathname === `/v1/courses/${externalId}`) {
+      detailRequests += 1;
+      return Response.json({ course: courseDetailFixture(externalId) });
+    }
+    return new Response('not found', { status: 404 });
+  };
+
+  const res = await handleRequest(request('import', { externalId }, token));
+  assert(res.status === 200, `expected 200, got ${res.status}`);
+  const body = await res.json();
+  assert(detailRequests === 1, 'an archived cache entry must not short-circuit the GolfCourseAPI fetch');
+  assert(body.tees.length === 1, 'real tee data from the fresh fetch is returned, not the stale empty cache');
+
+  const { data: courseRow } = await db.from('golf_courses').select('archived_at, id').eq('id', archivedCourse!.id).single();
+  assert(courseRow?.id === body.course.id, 'the same golf_courses row (matched by external_id) was reused, not a second duplicate row');
+  assert(courseRow?.archived_at == null, 'the row was un-archived once fresh, usable data was fetched for it');
+});
+
 Deno.test('upstream 429 maps to a rate_limited message', async () => {
   mockHandler = () => new Response('rate limited', { status: 429 });
   const res = await handleRequest(request('search', { query: 'pinehurst' }, token));

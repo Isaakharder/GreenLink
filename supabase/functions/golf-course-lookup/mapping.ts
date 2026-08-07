@@ -76,9 +76,14 @@ export function isTeeUsable(tee: GolfCourseApiTee): boolean {
 }
 
 export function hasUsableTees(tees: GolfCourseApiCourseDetail['tees'] | undefined | null): boolean {
+  return countUsableTees(tees) > 0;
+}
+
+/** How many of a course's tees (male + female) actually pass isTeeUsable() -- used both for the 'usable'/'unusable' label and as part of a search result's identity, so "one incomplete tee, one valid tee" is never collapsed into a flat unusable verdict. */
+export function countUsableTees(tees: GolfCourseApiCourseDetail['tees'] | undefined | null): number {
   const male = tees?.male ?? [];
   const female = tees?.female ?? [];
-  return [...male, ...female].some(isTeeUsable);
+  return [...male, ...female].filter(isTeeUsable).length;
 }
 
 export type ScorecardStatus = 'usable' | 'unusable' | 'unknown';
@@ -99,6 +104,14 @@ export function scorecardStatusFromSearchResult(course: GolfCourseApiSearchResul
 // Search results -> frontend display summary. Enough to distinguish
 // similarly-named courses (club name, course name, city/state/country) per
 // requirement 3, without leaking the raw API payload to the client.
+//
+// courseId/externalProvider/usableTeeCount are a result's *identity* (see
+// mergeCourseSearchResults() below): courseId is set only when this result
+// is backed by a GreenLink golf_courses row (any source -- manual, bulk
+// -imported, or a previously-cached GolfCourseAPI import), so the frontend
+// always knows exactly which row it selected instead of re-deriving it from
+// display text. externalProvider names the upstream API a result *also*
+// exists in, independent of whether it's currently local.
 // ---------------------------------------------------------------------------
 
 export type CourseSearchSource = 'golfcourseapi' | 'manual' | 'imported';
@@ -112,9 +125,13 @@ export interface CourseSearchSummary {
   country: string | null;
   scorecardStatus: ScorecardStatus;
   source: CourseSearchSource;
+  courseId: string | null;
+  externalProvider: 'golfcourseapi' | null;
+  usableTeeCount: number;
 }
 
 export function toSearchSummary(course: GolfCourseApiSearchResult): CourseSearchSummary {
+  const usableTeeCount = course.tees === undefined ? 0 : countUsableTees(course.tees);
   return {
     externalId: String(course.id),
     clubName: course.club_name,
@@ -124,6 +141,9 @@ export function toSearchSummary(course: GolfCourseApiSearchResult): CourseSearch
     country: course.location?.country ?? null,
     scorecardStatus: scorecardStatusFromSearchResult(course),
     source: 'golfcourseapi',
+    courseId: null,
+    externalProvider: 'golfcourseapi',
+    usableTeeCount,
   };
 }
 
@@ -144,9 +164,18 @@ export interface LocalCourseSearchRow {
   country: string | null;
   source: string;
   has_usable_tee: boolean;
+  usable_tee_count: number;
 }
 
 export function fromLocalCourseSearchRow(row: LocalCourseSearchRow): CourseSearchSummary {
+  // row.source is GreenLink's own source label straight from golf_courses'
+  // check constraint ('golfcourseapi' | 'manual' | 'imported') -- passed
+  // through as-is now that search_courses() (0030) returns previously
+  // -cached GolfCourseAPI imports too. Collapsing everything that isn't
+  // 'imported' into 'manual' (the old behavior) mislabeled those cached
+  // rows and lost their external provider, which is exactly the identity
+  // information requirement 3 is about.
+  const source = (row.source === 'golfcourseapi' || row.source === 'imported' ? row.source : 'manual') as CourseSearchSource;
   return {
     externalId: row.external_id,
     clubName: row.club_name,
@@ -154,8 +183,11 @@ export function fromLocalCourseSearchRow(row: LocalCourseSearchRow): CourseSearc
     city: row.city,
     state: row.state,
     country: row.country,
-    scorecardStatus: row.has_usable_tee ? 'usable' : 'unusable',
-    source: row.source === 'imported' ? 'imported' : 'manual',
+    scorecardStatus: row.usable_tee_count > 0 ? 'usable' : 'unusable',
+    source,
+    courseId: row.id,
+    externalProvider: source === 'golfcourseapi' ? 'golfcourseapi' : null,
+    usableTeeCount: row.usable_tee_count,
   };
 }
 
@@ -168,22 +200,41 @@ function courseMatchKey(course: Pick<CourseSearchSummary, 'clubName' | 'courseNa
 }
 
 /**
- * Merges GreenLink's own course library results ahead of GolfCourseAPI's
- * (local/exact GreenLink matches rank first), dropping an API result only
- * when it's a *reliable* duplicate of a local one -- exact, case-
- * insensitive club name + course name match, never a fuzzy guess -- and
- * only when the API record has no usable tees while the local one does
- * (prefer the complete GreenLink record). If the API result is itself
- * usable, both are kept and left clearly distinguishable by source rather
- * than silently merged or hidden.
+ * Merges GreenLink's own course library (manual courses, bulk-imported
+ * courses, and previously-cached GolfCourseAPI imports -- search_courses()
+ * as of 0030 returns all three, closing the gap that let a complete,
+ * already-played course go permanently unmatched against a later duplicate
+ * search result) ahead of a fresh GolfCourseAPI search.
+ *
+ * Two distinct dedup rules, both deliberately conservative:
+ *
+ * 1. Exact identity: an API result sharing a local result's exact
+ *    external_id isn't "possibly the same course" -- it *is* the same
+ *    golf_courses row, re-offered by a fresh live search. Always dropped in
+ *    favor of the local copy (which carries courseId and, once imported,
+ *    never needs another GolfCourseAPI round trip).
+ *
+ * 2. Exact name match, never a fuzzy guess: within results sharing the
+ *    exact same (case/whitespace-insensitive) club name *and* course name,
+ *    a result with zero usable tees is dropped when another result under
+ *    that same exact name has at least one -- regardless of which side
+ *    (local or API) is complete. This deliberately does NOT match on club
+ *    name (or club+city) alone: two GolfCourseAPI search results can share
+ *    a club name while being genuinely different, currently-playable
+ *    layouts at a multi-course club (e.g. Deer Run Golf Club's "Buck/Doe"
+ *    and "Doe/Fawn" -- confirmed distinct, both real, during this
+ *    investigation) -- collapsing those would hide a real course exactly
+ *    the way this bug hid Orchard View's real one. A result whose course
+ *    name doesn't exactly match anything else is always kept, complete or
+ *    not, and left distinguishable by source/courseId rather than merged.
  */
 export function mergeCourseSearchResults(local: CourseSearchSummary[], api: CourseSearchSummary[]): CourseSearchSummary[] {
-  const localKeys = new Set(local.map(courseMatchKey));
-  const filteredApi = api.filter((apiCourse) => {
-    if (!localKeys.has(courseMatchKey(apiCourse))) return true;
-    return apiCourse.scorecardStatus !== 'unusable';
-  });
-  return [...local, ...filteredApi];
+  const localExternalIds = new Set(local.map((course) => course.externalId));
+  const apiWithoutExactDuplicates = api.filter((course) => !localExternalIds.has(course.externalId));
+
+  const combined = [...local, ...apiWithoutExactDuplicates];
+  const usableMatchKeys = new Set(combined.filter((course) => course.scorecardStatus === 'usable').map(courseMatchKey));
+  return combined.filter((course) => course.scorecardStatus !== 'unusable' || !usableMatchKeys.has(courseMatchKey(course)));
 }
 
 // ---------------------------------------------------------------------------

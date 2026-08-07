@@ -18,7 +18,7 @@ begin;
 create extension if not exists pgtap;
 create extension if not exists pgcrypto;
 
-select plan(68);
+select plan(75);
 
 create temp table fixtures (key text primary key, value text);
 
@@ -81,13 +81,16 @@ end $$;
 -- Function's service-role client would (no RLS insert policy exists for a
 -- regular authenticated session -- by design, see 0020) -- done here, still
 -- under the table owner, before any `set local role authenticated` below.
+-- published_at is stamped explicitly (0030: handleImport() now does this on
+-- every import -- omitting it here would just be testing a fixture that can
+-- no longer occur in production).
 do $$
 declare
   v_api_course_id uuid;
   v_api_tee_id uuid;
 begin
-  insert into public.golf_courses (external_id, club_name, course_name, city, imported_by, raw_payload)
-  values ('api-fixture-1', 'Api Sourced Club', 'Api Course', 'Fixtureville', '50000000-0000-0000-0000-000000000001', '{}'::jsonb)
+  insert into public.golf_courses (external_id, club_name, course_name, city, imported_by, raw_payload, published_at)
+  values ('api-fixture-1', 'Api Sourced Club', 'Api Course', 'Fixtureville', '50000000-0000-0000-0000-000000000001', '{}'::jsonb, now())
   returning id into v_api_course_id;
   perform pg_temp.remember('api_course', v_api_course_id::text);
 
@@ -98,6 +101,108 @@ begin
 
   insert into public.golf_course_tee_holes (tee_id, hole_number, par)
   select v_api_tee_id, n, 4 from generate_series(1, 9) as n;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Regression fixtures for the Orchard View Golf Club production incident
+-- (0030): a complete, already-imported golfcourseapi course must be
+-- findable via search_courses() and correctly flagged usable, an
+-- unpublished golfcourseapi row must stay invisible regardless of source,
+-- a course with one archived and one active tee must count only the
+-- active one, and a course with one broken tee alongside one valid tee
+-- must not be flagged unusable overall.
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+  v_complete_id uuid;
+  v_duplicate_id uuid;
+  v_unpublished_id uuid;
+  v_archived_pair_id uuid;
+  v_mixed_id uuid;
+  v_tee_id uuid;
+begin
+  -- Complete, published, previously-imported course (stands in for the real
+  -- Orchard View Golf Club row, external_id 25562).
+  insert into public.golf_courses (external_id, club_name, course_name, city, imported_by, raw_payload, published_at)
+  values ('regression-complete-1', 'Regression Orchard Golf Club', 'Regression Orchard Golf Club', 'Fixtureville',
+    '50000000-0000-0000-0000-000000000001', '{}'::jsonb, now())
+  returning id into v_complete_id;
+  perform pg_temp.remember('regression_complete', v_complete_id::text);
+
+  insert into public.golf_course_tees (golf_course_id, tee_name, gender, number_of_holes, par_total)
+  values (v_complete_id, 'White', 'male', 9, 36)
+  returning id into v_tee_id;
+  insert into public.golf_course_tee_holes (tee_id, hole_number, par)
+  select v_tee_id, n, 4 from generate_series(1, 9) as n;
+
+  -- Incomplete duplicate (stands in for the broken "(Old)" listing, external_id
+  -- 'zcvtyq4k') -- published (matching the real broken row found in
+  -- production), zero tees.
+  insert into public.golf_courses (external_id, club_name, course_name, city, imported_by, raw_payload, published_at)
+  values ('regression-duplicate-1', 'Regression Orchard Golf Club', 'Regression Orchard Golf Club (Old)', 'Fixtureville',
+    '50000000-0000-0000-0000-000000000001', '{}'::jsonb, now())
+  returning id into v_duplicate_id;
+  perform pg_temp.remember('regression_duplicate', v_duplicate_id::text);
+
+  -- A golfcourseapi-sourced course that was imported but never published
+  -- (published_at null) -- must stay invisible to search_courses() no
+  -- matter how complete its tee data is; source alone is no longer the
+  -- gate, published_at still is.
+  insert into public.golf_courses (external_id, club_name, course_name, city, imported_by, raw_payload)
+  values ('regression-unpublished-1', 'Regression Unpublished Club', 'Regression Unpublished Course', 'Fixtureville',
+    '50000000-0000-0000-0000-000000000001', '{}'::jsonb)
+  returning id into v_unpublished_id;
+  perform pg_temp.remember('regression_unpublished', v_unpublished_id::text);
+
+  insert into public.golf_course_tees (golf_course_id, tee_name, gender, number_of_holes, par_total)
+  values (v_unpublished_id, 'Blue', 'male', 9, 36)
+  returning id into v_tee_id;
+  insert into public.golf_course_tee_holes (tee_id, hole_number, par)
+  select v_tee_id, n, 4 from generate_series(1, 9) as n;
+
+  -- A tee that was edited after being used (archived) plus its active
+  -- replacement -- only the active one should count towards usability.
+  insert into public.golf_courses (external_id, club_name, course_name, city, imported_by, raw_payload, published_at)
+  values ('regression-archived-pair-1', 'Regression Archived Pair Club', 'Regression Archived Pair Club', 'Fixtureville',
+    '50000000-0000-0000-0000-000000000001', '{}'::jsonb, now())
+  returning id into v_archived_pair_id;
+  perform pg_temp.remember('regression_archived_pair', v_archived_pair_id::text);
+
+  insert into public.golf_course_tees (golf_course_id, tee_name, gender, number_of_holes, par_total, archived_at)
+  values (v_archived_pair_id, 'Blue', 'male', 9, 32, now())
+  returning id into v_tee_id;
+  insert into public.golf_course_tee_holes (tee_id, hole_number, par)
+  select v_tee_id, n, 3 from generate_series(1, 9) as n;
+
+  insert into public.golf_course_tees (golf_course_id, tee_name, gender, number_of_holes, par_total)
+  values (v_archived_pair_id, 'Blue', 'male', 9, 36)
+  returning id into v_tee_id;
+  perform pg_temp.remember('regression_archived_pair_active_tee', v_tee_id::text);
+  insert into public.golf_course_tee_holes (tee_id, hole_number, par)
+  select v_tee_id, n, 4 from generate_series(1, 9) as n;
+
+  -- One usable 9-hole tee alongside one broken tee (missing a par on one
+  -- hole) at the same course -- the course as a whole must still read as
+  -- usable, and the broken tee must not be counted.
+  insert into public.golf_courses (external_id, club_name, course_name, city, imported_by, raw_payload, published_at)
+  values ('regression-mixed-1', 'Regression Mixed Tee Club', 'Regression Mixed Tee Club', 'Fixtureville',
+    '50000000-0000-0000-0000-000000000001', '{}'::jsonb, now())
+  returning id into v_mixed_id;
+  perform pg_temp.remember('regression_mixed', v_mixed_id::text);
+
+  insert into public.golf_course_tees (golf_course_id, tee_name, gender, number_of_holes, par_total)
+  values (v_mixed_id, 'Valid', 'male', 9, 36)
+  returning id into v_tee_id;
+  insert into public.golf_course_tee_holes (tee_id, hole_number, par)
+  select v_tee_id, n, 4 from generate_series(1, 9) as n;
+
+  insert into public.golf_course_tees (golf_course_id, tee_name, gender, number_of_holes, par_total)
+  values (v_mixed_id, 'Broken', 'female', 9, null)
+  returning id into v_tee_id;
+  -- Only 8 of 9 holes get a par row -- an incomplete tee, still non-archived.
+  insert into public.golf_course_tee_holes (tee_id, hole_number, par)
+  select v_tee_id, n, 4 from generate_series(1, 8) as n;
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -279,8 +384,8 @@ select ok(
 
 -- ---------------------------------------------------------------------------
 -- 4) search_courses(): matches club/course/city/state/country, excludes
---    golfcourseapi-sourced rows (those are searched live, not via this
---    function) and archived rows.
+--    archived and unpublished rows (0030: source is no longer a gate --
+--    see the Orchard View regression fixtures/tests below).
 -- ---------------------------------------------------------------------------
 
 select ok(
@@ -298,8 +403,45 @@ select ok(
 
 select is(
   (select count(*)::int from public.search_courses('Api Sourced Club')),
+  1,
+  'a published, usable golfcourseapi-sourced row IS returned by search_courses (0030 fix -- previously excluded by source alone, which is what let a complete, already-imported course go permanently unmatched)'
+);
+select ok(
+  (select has_usable_tee from public.search_courses('Api Sourced Club') where id = pg_temp.recall('api_course')::uuid),
+  'the previously-cached golfcourseapi course is flagged has_usable_tee'
+);
+
+-- --- Orchard View regression coverage (0030) -----------------------------
+
+select is(
+  (select count(*)::int from public.search_courses('Regression Orchard Golf Club')),
+  2,
+  'both the complete course and its incomplete duplicate are returned -- search_courses() does not dedupe by name, that is the Edge Function''s mergeCourseSearchResults() job'
+);
+select ok(
+  (select has_usable_tee and usable_tee_count > 0 from public.search_courses('Regression Orchard Golf Club') where id = pg_temp.recall('regression_complete')::uuid),
+  'the complete, previously-imported course is flagged usable with a positive tee count'
+);
+select ok(
+  (select not has_usable_tee and usable_tee_count = 0 from public.search_courses('Regression Orchard Golf Club') where id = pg_temp.recall('regression_duplicate')::uuid),
+  'the zero-tee duplicate is flagged unusable, never confused with the complete course it duplicates'
+);
+
+select is(
+  (select count(*)::int from public.search_courses('Regression Unpublished')),
   0,
-  'a golfcourseapi-sourced row is never returned by search_courses -- that source is searched live instead'
+  'an unpublished golfcourseapi-sourced course stays invisible to search regardless of how complete its tee data is -- published_at is the gate, not source'
+);
+
+select is(
+  (select usable_tee_count from public.search_courses('Regression Archived Pair Club') where id = pg_temp.recall('regression_archived_pair')::uuid),
+  1,
+  'an archived tee superseded by an edit is never counted, even though its replacement is -- only the active tee counts'
+);
+
+select ok(
+  (select has_usable_tee and usable_tee_count = 1 from public.search_courses('Regression Mixed Tee Club') where id = pg_temp.recall('regression_mixed')::uuid),
+  'one incomplete tee (missing a hole''s par) never makes the whole course unusable when another tee on it is complete -- and the incomplete tee itself is excluded from the count'
 );
 
 reset role;

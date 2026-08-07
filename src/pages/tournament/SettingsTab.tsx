@@ -4,7 +4,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
 import { defaultParsForHoleCount, DISTANCE_UNITS } from '../../lib/constants';
 import { CourseSearchField } from '../../components/CourseSearchField';
-import { formatTeeSummary, GolfCourseSearchError, importGolfCourse, type CourseSearchResult, type ImportedCourseTee } from '../../lib/golfCourseApi';
+import {
+  formatTeeSummary,
+  GolfCourseSearchError,
+  hasUsableTee,
+  importGolfCourse,
+  isKnownUnusable,
+  markCourseUnusable,
+  type CourseSearchResult,
+  type ImportedCourseTee,
+} from '../../lib/golfCourseApi';
 import { classifyTeeCompatibility } from '../../lib/courseImport';
 import { refreshIfDownloaded } from '../../lib/offlineDownload';
 import { useAuth } from '../../auth/useAuth';
@@ -177,16 +186,27 @@ export function SettingsTab() {
   }
 
   async function handleCourseSelect(result: CourseSearchResult) {
-    setImporting(true);
     setImportError(null);
     setApplySuccess(null);
     setAvailableTees(null);
     setPendingNineTeeId(null);
+    const composedName = `${result.clubName}${result.courseName !== result.clubName ? ` — ${result.courseName}` : ''}`;
 
+    // Already confirmed unusable this session (or the search result itself
+    // said so) -- skip the import round trip, same guard StartRound and
+    // Create Tournament use for the same search results.
+    if (result.scorecardStatus === 'unusable' || isKnownUnusable(result.externalId)) {
+      setImportedCourseName(composedName);
+      setAvailableTees([]);
+      return;
+    }
+
+    setImporting(true);
     try {
       const { tees } = await importGolfCourse(result.externalId);
-      setImportedCourseName(`${result.clubName}${result.courseName !== result.clubName ? ` — ${result.courseName}` : ''}`);
+      setImportedCourseName(composedName);
       setAvailableTees(tees);
+      if (!hasUsableTee(tees)) markCourseUnusable(result.externalId);
     } catch (err) {
       setImportError(
         err instanceof GolfCourseSearchError ? err.message : 'Course search is unavailable right now. You can still enter the course by hand.',

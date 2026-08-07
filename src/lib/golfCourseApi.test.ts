@@ -5,7 +5,18 @@ vi.mock('./supabaseClient', () => ({
   supabase: { functions: { invoke: (...args: unknown[]) => invokeMock(...args) } },
 }));
 
-import { formatCourseLocation, formatTeeSummary, searchGolfCourses, GolfCourseSearchError, type CourseSearchResult, type ImportedCourseTee } from './golfCourseApi';
+import {
+  formatCourseLocation,
+  formatCourseSourceLabel,
+  formatTeeSummary,
+  hasUsableTee,
+  isKnownUnusable,
+  markCourseUnusable,
+  searchGolfCourses,
+  GolfCourseSearchError,
+  type CourseSearchResult,
+  type ImportedCourseTee,
+} from './golfCourseApi';
 
 describe('formatCourseLocation', () => {
   it('joins city and state for the common case', () => {
@@ -95,6 +106,51 @@ describe('searchGolfCourses error classification', () => {
     const results = await searchGolfCourses('pinehurst');
     expect(results).toHaveLength(1);
     expect(results[0].externalId).toBe('1');
+  });
+});
+
+describe('formatCourseSourceLabel', () => {
+  it('labels a manual/bulk-imported GreenLink course "GreenLink Course"', () => {
+    expect(formatCourseSourceLabel({ source: 'manual', courseId: 'c1' })).toBe('GreenLink Course');
+    expect(formatCourseSourceLabel({ source: 'imported', courseId: 'c1' })).toBe('GreenLink Course');
+  });
+
+  it('labels a previously-cached GolfCourseAPI course (courseId set) "Saved Course" -- distinct from a fresh API result', () => {
+    expect(formatCourseSourceLabel({ source: 'golfcourseapi', courseId: 'c1' })).toBe('Saved Course');
+  });
+
+  it('labels a fresh GolfCourseAPI result with no local courseId "GolfCourseAPI"', () => {
+    expect(formatCourseSourceLabel({ source: 'golfcourseapi', courseId: null })).toBe('GolfCourseAPI');
+  });
+});
+
+describe('session-level unusable-course cache', () => {
+  it('only poisons the exact externalId it was told about, never a different course', () => {
+    const brokenId = `broken-${Math.random()}`;
+    const complete = `complete-${Math.random()}`;
+    markCourseUnusable(brokenId);
+    expect(isKnownUnusable(brokenId)).toBe(true);
+    expect(isKnownUnusable(complete)).toBe(false);
+  });
+});
+
+describe('hasUsableTee', () => {
+  const tee: ImportedCourseTee = {
+    id: 't1',
+    tee_name: 'Blue',
+    gender: 'male',
+    number_of_holes: 18,
+    par_total: 72,
+    course_rating: null,
+    slope_rating: null,
+  };
+
+  it('is true whenever at least one tee comes back, null rating/slope and all', () => {
+    expect(hasUsableTee([tee])).toBe(true);
+  });
+
+  it('is false for an empty tees array', () => {
+    expect(hasUsableTee([])).toBe(false);
   });
 });
 

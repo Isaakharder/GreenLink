@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  countUsableTees,
   flattenTees,
   fromLocalCourseSearchRow,
   hasUsableTees,
@@ -16,49 +17,6 @@ import {
   type GolfCourseApiTee,
   type LocalCourseSearchRow,
 } from './mapping';
-
-describe('toSearchSummary', () => {
-  it('maps id/club_name/course_name/location into a display summary', () => {
-    const summary = toSearchSummary({
-      id: 42,
-      club_name: 'Pinehurst Resort',
-      course_name: 'Pinehurst No. 2',
-      location: { city: 'Pinehurst', state: 'NC', country: 'USA' },
-    });
-    expect(summary).toEqual({
-      externalId: '42',
-      clubName: 'Pinehurst Resort',
-      courseName: 'Pinehurst No. 2',
-      city: 'Pinehurst',
-      state: 'NC',
-      country: 'USA',
-      scorecardStatus: 'unknown',
-      source: 'golfcourseapi',
-    });
-  });
-
-  it('falls back to null location fields when missing, rather than throwing', () => {
-    const summary = toSearchSummary({ id: 'abc', club_name: 'Some Club', course_name: 'Some Course' });
-    expect(summary.city).toBeNull();
-    expect(summary.state).toBeNull();
-    expect(summary.country).toBeNull();
-  });
-});
-
-describe('toGolfCourseRow', () => {
-  it('maps a course detail into the golf_courses row shape, keeping the raw payload', () => {
-    const detail: GolfCourseApiCourseDetail = {
-      id: 42,
-      club_name: 'Pinehurst Resort',
-      course_name: 'Pinehurst No. 2',
-      location: { address: '1 Carolina Vista Dr', city: 'Pinehurst', state: 'NC', country: 'USA' },
-    };
-    const row = toGolfCourseRow(detail);
-    expect(row.external_id).toBe('42');
-    expect(row.address).toBe('1 Carolina Vista Dr');
-    expect(row.raw_payload).toBe(detail);
-  });
-});
 
 const eighteenHoleTee: GolfCourseApiTee = {
   tee_name: 'Blue',
@@ -77,6 +35,82 @@ const nineHoleTee: GolfCourseApiTee = {
   number_of_holes: 9,
   holes: Array.from({ length: 9 }, (_, i) => ({ par: 4, yardage: 350 + i, handicap: i + 1 })),
 };
+
+describe('toSearchSummary', () => {
+  it('maps id/club_name/course_name/location into a display summary', () => {
+    const summary = toSearchSummary({
+      id: 42,
+      club_name: 'Pinehurst Resort',
+      course_name: 'Pinehurst No. 2',
+      location: { city: 'Pinehurst', state: 'NC', country: 'USA' },
+    });
+    expect(summary).toEqual({
+      externalId: '42',
+      clubName: 'Pinehurst Resort',
+      courseName: 'Pinehurst No. 2',
+      city: 'Pinehurst',
+      state: 'NC',
+      country: 'USA',
+      scorecardStatus: 'unknown',
+      source: 'golfcourseapi',
+      courseId: null,
+      externalProvider: 'golfcourseapi',
+      usableTeeCount: 0,
+    });
+  });
+
+  it('falls back to null location fields when missing, rather than throwing', () => {
+    const summary = toSearchSummary({ id: 'abc', club_name: 'Some Club', course_name: 'Some Course' });
+    expect(summary.city).toBeNull();
+    expect(summary.state).toBeNull();
+    expect(summary.country).toBeNull();
+  });
+
+  it('never carries a courseId -- a fresh API result has no GreenLink row until imported', () => {
+    expect(toSearchSummary({ id: 42, club_name: 'Club', course_name: 'Course' }).courseId).toBeNull();
+  });
+
+  it('counts only genuinely usable tees, not every tee present', () => {
+    const summary = toSearchSummary({
+      id: 1,
+      club_name: 'Club',
+      course_name: 'Course',
+      tees: { male: [eighteenHoleTee, { ...eighteenHoleTee, holes: [] }], female: [eighteenHoleTee] },
+    });
+    expect(summary.usableTeeCount).toBe(2);
+    expect(summary.scorecardStatus).toBe('usable');
+  });
+});
+
+describe('countUsableTees', () => {
+  it('is 0 when tees is entirely absent', () => {
+    expect(countUsableTees(undefined)).toBe(0);
+    expect(countUsableTees(null)).toBe(0);
+  });
+
+  it('counts usable male and female tees together', () => {
+    expect(countUsableTees({ male: [eighteenHoleTee], female: [eighteenHoleTee, nineHoleTee] })).toBe(3);
+  });
+
+  it('excludes an unusable tee from the count without zeroing out the usable ones', () => {
+    expect(countUsableTees({ male: [eighteenHoleTee, { ...eighteenHoleTee, holes: [] }] })).toBe(1);
+  });
+});
+
+describe('toGolfCourseRow', () => {
+  it('maps a course detail into the golf_courses row shape, keeping the raw payload', () => {
+    const detail: GolfCourseApiCourseDetail = {
+      id: 42,
+      club_name: 'Pinehurst Resort',
+      course_name: 'Pinehurst No. 2',
+      location: { address: '1 Carolina Vista Dr', city: 'Pinehurst', state: 'NC', country: 'USA' },
+    };
+    const row = toGolfCourseRow(detail);
+    expect(row.external_id).toBe('42');
+    expect(row.address).toBe('1 Carolina Vista Dr');
+    expect(row.raw_payload).toBe(detail);
+  });
+});
 
 describe('isTeeUsable', () => {
   it('accepts a fully-scored 18-hole tee', () => {
@@ -268,6 +302,7 @@ const localRow: LocalCourseSearchRow = {
   country: 'Canada',
   source: 'manual',
   has_usable_tee: true,
+  usable_tee_count: 2,
 };
 
 describe('fromLocalCourseSearchRow', () => {
@@ -281,15 +316,29 @@ describe('fromLocalCourseSearchRow', () => {
       country: 'Canada',
       scorecardStatus: 'usable',
       source: 'manual',
+      courseId: 'course-1',
+      externalProvider: null,
+      usableTeeCount: 2,
     });
   });
 
-  it('maps has_usable_tee = false to scorecardStatus unusable', () => {
-    expect(fromLocalCourseSearchRow({ ...localRow, has_usable_tee: false }).scorecardStatus).toBe('unusable');
+  it('maps usable_tee_count = 0 to scorecardStatus unusable, independent of has_usable_tee', () => {
+    expect(fromLocalCourseSearchRow({ ...localRow, has_usable_tee: false, usable_tee_count: 0 }).scorecardStatus).toBe('unusable');
   });
 
   it('maps source "imported" through unchanged', () => {
     expect(fromLocalCourseSearchRow({ ...localRow, source: 'imported' }).source).toBe('imported');
+  });
+
+  it('maps source "golfcourseapi" through unchanged (a previously-cached GolfCourseAPI import), unlike the old behavior that collapsed it into "manual"', () => {
+    const cached = fromLocalCourseSearchRow({ ...localRow, source: 'golfcourseapi', external_id: '25562' });
+    expect(cached.source).toBe('golfcourseapi');
+    expect(cached.externalProvider).toBe('golfcourseapi');
+    expect(cached.courseId).toBe('course-1');
+  });
+
+  it('gives a manual/imported row no external provider', () => {
+    expect(fromLocalCourseSearchRow(localRow).externalProvider).toBeNull();
   });
 });
 
@@ -303,23 +352,34 @@ describe('mergeCourseSearchResults', () => {
     country: 'Canada',
     scorecardStatus: 'usable',
     source: 'manual',
+    courseId: 'course-1',
+    externalProvider: null,
+    usableTeeCount: 2,
   };
 
   it('ranks local GreenLink results ahead of GolfCourseAPI results', () => {
-    const api: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', clubName: 'Some Other Club' };
+    const api: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', courseId: null, externalProvider: 'golfcourseapi', clubName: 'Some Other Club' };
     const merged = mergeCourseSearchResults([local], [api]);
     expect(merged[0]).toBe(local);
     expect(merged[1]).toBe(api);
   });
 
   it('drops an API duplicate when it has no usable tees and a local record already covers the same course (prefer the complete GreenLink record)', () => {
-    const incompleteApiDuplicate: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', scorecardStatus: 'unusable' };
+    const incompleteApiDuplicate: CourseSearchSummary = {
+      ...local,
+      externalId: 'api-1',
+      source: 'golfcourseapi',
+      courseId: null,
+      externalProvider: 'golfcourseapi',
+      scorecardStatus: 'unusable',
+      usableTeeCount: 0,
+    };
     const merged = mergeCourseSearchResults([local], [incompleteApiDuplicate]);
     expect(merged).toEqual([local]);
   });
 
   it('keeps both when the API duplicate is also usable -- never silently merges, just lets the source label distinguish them', () => {
-    const usableApiDuplicate: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', scorecardStatus: 'usable' };
+    const usableApiDuplicate: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', courseId: null, externalProvider: 'golfcourseapi' };
     const merged = mergeCourseSearchResults([local], [usableApiDuplicate]);
     expect(merged).toHaveLength(2);
     expect(merged.map((c) => c.source)).toEqual(['manual', 'golfcourseapi']);
@@ -330,7 +390,10 @@ describe('mergeCourseSearchResults', () => {
       ...local,
       externalId: 'api-1',
       source: 'golfcourseapi',
+      courseId: null,
+      externalProvider: 'golfcourseapi',
       scorecardStatus: 'unusable',
+      usableTeeCount: 0,
       clubName: '  deer run golf club  ',
       courseName: 'BUCK/DOE',
     };
@@ -342,7 +405,10 @@ describe('mergeCourseSearchResults', () => {
       ...local,
       externalId: 'api-1',
       source: 'golfcourseapi',
+      courseId: null,
+      externalProvider: 'golfcourseapi',
       scorecardStatus: 'unusable',
+      usableTeeCount: 0,
       courseName: 'Doe/Fawn', // a real, distinct sibling layout at the same club (see investigation)
     };
     const merged = mergeCourseSearchResults([local], [similarButDifferentCourse]);
@@ -350,7 +416,71 @@ describe('mergeCourseSearchResults', () => {
   });
 
   it('keeps every API result when there is no local course at all', () => {
-    const api: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', scorecardStatus: 'unusable', clubName: 'Unrelated Club' };
+    const api: CourseSearchSummary = { ...local, externalId: 'api-1', source: 'golfcourseapi', courseId: null, externalProvider: 'golfcourseapi', scorecardStatus: 'unusable', usableTeeCount: 0, clubName: 'Unrelated Club' };
     expect(mergeCourseSearchResults([], [api])).toEqual([api]);
+  });
+
+  // --- Regression coverage for the Orchard View Golf Club production incident ---
+
+  const orchardViewComplete: CourseSearchSummary = {
+    externalId: '25562',
+    clubName: 'Orchard View Golf Club',
+    courseName: 'Orchard View Golf Club',
+    city: null,
+    state: null,
+    country: null,
+    scorecardStatus: 'usable',
+    source: 'golfcourseapi',
+    courseId: 'orchard-view-course-id',
+    externalProvider: 'golfcourseapi',
+    usableTeeCount: 6,
+  };
+
+  it('never drops a complete, already-cached GolfCourseAPI course (has courseId) -- the exact incident this merge logic exists to prevent', () => {
+    const brokenDuplicateListing: CourseSearchSummary = {
+      externalId: 'zcvtyq4k',
+      clubName: 'Orchard View Golf Club',
+      courseName: 'Orchard View Golf Club (Old)',
+      city: null,
+      state: null,
+      country: null,
+      scorecardStatus: 'unusable',
+      source: 'golfcourseapi',
+      courseId: null,
+      externalProvider: 'golfcourseapi',
+      usableTeeCount: 0,
+    };
+    const merged = mergeCourseSearchResults([orchardViewComplete], [brokenDuplicateListing]);
+    // Different course_name ("Orchard View Golf Club (Old)" vs "Orchard View
+    // Golf Club") means this is NOT an exact-name duplicate -- both are
+    // shown, but the complete, already-known course is first and carries
+    // its identity (courseId) so selecting it never needs GolfCourseAPI.
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toBe(orchardViewComplete);
+    expect(merged[0].courseId).not.toBeNull();
+    expect(merged[0].usableTeeCount).toBeGreaterThan(0);
+  });
+
+  it('drops an API result that is an exact identity duplicate (same external_id) of a local result, regardless of usability', () => {
+    const sameRowRefetched: CourseSearchSummary = {
+      ...orchardViewComplete,
+      courseId: null,
+      scorecardStatus: 'unusable',
+      usableTeeCount: 0,
+    };
+    const merged = mergeCourseSearchResults([orchardViewComplete], [sameRowRefetched]);
+    expect(merged).toEqual([orchardViewComplete]);
+  });
+
+  it('would still (correctly) merge away an exact-name incomplete duplicate of the complete Orchard View record', () => {
+    const exactNameIncompleteDuplicate: CourseSearchSummary = {
+      ...orchardViewComplete,
+      externalId: 'some-other-id',
+      courseId: null,
+      scorecardStatus: 'unusable',
+      usableTeeCount: 0,
+    };
+    const merged = mergeCourseSearchResults([orchardViewComplete], [exactNameIncompleteDuplicate]);
+    expect(merged).toEqual([orchardViewComplete]);
   });
 });

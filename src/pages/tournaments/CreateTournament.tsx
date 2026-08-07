@@ -7,8 +7,12 @@ import { classifyTeeCompatibility } from '../../lib/courseImport';
 import {
   formatTeeSummary,
   GolfCourseSearchError,
+  hasUsableTee,
   importGolfCourse,
+  isKnownUnusable,
+  markCourseUnusable,
   type CourseSearchResult,
+  type CourseSearchSource,
   type ImportedCourseTee,
 } from '../../lib/golfCourseApi';
 import styles from './CreateTournament.module.css';
@@ -17,6 +21,8 @@ interface SelectedCourse {
   externalId: string;
   clubName: string;
   courseName: string;
+  /** Preserved from the exact search result the organizer clicked, not re-derived from clubName/courseName -- see requirement "selected course state must preserve the exact result identity". */
+  source: CourseSearchSource;
 }
 
 export function CreateTournament() {
@@ -55,17 +61,29 @@ export function CreateTournament() {
 
   async function handleCourseSelect(result: CourseSearchResult) {
     setImportError(null);
-    setImportingCourse(true);
     setAvailableTees(null);
     setSelectedTeeId(null);
     setSelectedNine(null);
     setPendingNineTeeId(null);
 
+    // Already confirmed unusable this session (or the search result itself
+    // said so) -- skip straight to "no tee data" instead of a redundant
+    // import round trip. Mirrors StartRound's guard so the two entry points
+    // never disagree about the same search result.
+    if (result.scorecardStatus === 'unusable' || isKnownUnusable(result.externalId)) {
+      setSelectedCourse({ externalId: result.externalId, clubName: result.clubName, courseName: result.courseName, source: result.source });
+      setAvailableTees([]);
+      setCourseName(result.courseName === result.clubName ? result.clubName : `${result.clubName} — ${result.courseName}`);
+      return;
+    }
+
+    setImportingCourse(true);
     try {
       const { course, tees } = await importGolfCourse(result.externalId);
-      setSelectedCourse({ externalId: result.externalId, clubName: course.club_name, courseName: course.course_name });
+      setSelectedCourse({ externalId: result.externalId, clubName: course.club_name, courseName: course.course_name, source: result.source });
       setAvailableTees(tees);
       setCourseName(course.course_name === course.club_name ? course.club_name : `${course.club_name} — ${course.course_name}`);
+      if (!hasUsableTee(tees)) markCourseUnusable(result.externalId);
     } catch (err) {
       setSelectedCourse(null);
       setImportError(err instanceof GolfCourseSearchError ? err.message : 'Something went wrong importing that course. You can still enter it by hand.');

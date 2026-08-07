@@ -91,8 +91,14 @@ export function CourseSearchField({ label, onSelect }: CourseSearchFieldProps) {
         <ul className={styles.results}>
           {results.map((result) => {
             const unusable = result.scorecardStatus === 'unusable';
+            // Local/external duplicates for the same club can share an
+            // externalId format (or, pre-fix, even collide outright) --
+            // keying on source + the most specific identity available
+            // (courseId when local, externalId otherwise) keeps every
+            // result its own list entry regardless.
+            const resultKey = `${result.source}:${result.courseId ?? result.externalId}`;
             return (
-              <li key={result.externalId}>
+              <li key={resultKey}>
                 <button
                   type="button"
                   className={`${styles.resultButton} ${unusable ? styles.resultUnusable : ''}`}
@@ -103,7 +109,7 @@ export function CourseSearchField({ label, onSelect }: CourseSearchFieldProps) {
                     {result.courseName}
                     {formatCourseLocation(result) && ` · ${formatCourseLocation(result)}`}
                     {' · '}
-                    <span className={styles.sourceLabel}>{formatCourseSourceLabel(result.source)}</span>
+                    <span className={styles.sourceLabel}>{formatCourseSourceLabel(result)}</span>
                   </span>
                   {unusable && <span className={`badge badge-declined ${styles.resultBadge}`}>Scorecard data unavailable</span>}
                 </button>

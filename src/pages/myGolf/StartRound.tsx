@@ -10,6 +10,7 @@ import {
   isKnownUnusable,
   markCourseUnusable,
   type CourseSearchResult,
+  type CourseSearchSource,
   type ImportedCourseTee,
 } from '../../lib/golfCourseApi';
 import { createManualCourse, fetchManualCourseTees, type ManualTeeInput } from '../../lib/courseLibrary';
@@ -27,6 +28,8 @@ interface SelectedCourse {
    * string above. Absent for Recent Courses (never routes through manual entry). */
   rawClubName?: string;
   rawLayoutName?: string;
+  /** Preserved from the exact search result tapped, not re-derived from courseName -- absent for Recent Courses, which already identify a course by golfCourseId and have no ambiguity to preserve. */
+  source?: CourseSearchSource;
 }
 
 interface ManualHoleRow {
@@ -121,7 +124,7 @@ export function StartRound() {
     // unusable by the search result itself) doesn't need another network
     // round trip -- go straight to the no-scorecard screen.
     if (result.scorecardStatus === 'unusable' || isKnownUnusable(result.externalId)) {
-      setSelectedCourse({ golfCourseId: null, courseName: composedName, rawClubName: result.clubName, rawLayoutName: result.courseName });
+      setSelectedCourse({ golfCourseId: result.courseId, courseName: composedName, rawClubName: result.clubName, rawLayoutName: result.courseName, source: result.source });
       setAvailableTees([]);
       return;
     }
@@ -129,7 +132,7 @@ export function StartRound() {
     setLoadingTees(true);
     try {
       const { course, tees } = await importGolfCourse(result.externalId);
-      setSelectedCourse({ golfCourseId: course.id, courseName: composedName, rawClubName: result.clubName, rawLayoutName: result.courseName });
+      setSelectedCourse({ golfCourseId: course.id, courseName: composedName, rawClubName: result.clubName, rawLayoutName: result.courseName, source: result.source });
       setAvailableTees(tees);
       if (!hasUsableTee(tees)) markCourseUnusable(result.externalId);
     } catch (err) {

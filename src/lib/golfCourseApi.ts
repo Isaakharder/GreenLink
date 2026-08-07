@@ -17,11 +17,26 @@ export interface CourseSearchResult {
   country: string | null;
   scorecardStatus: ScorecardStatus;
   source: CourseSearchSource;
+  /** GreenLink's own golf_courses.id -- set whenever this result is already backed by a local row (manual, bulk-imported, or a previously-cached GolfCourseAPI import), so selecting it never needs to be re-resolved by name. Never rendered to the user (internal identity only). */
+  courseId: string | null;
+  externalProvider: 'golfcourseapi' | null;
+  /** Tees that actually pass the server's usability bar (valid hole numbering, every hole has a real par) -- distinct from scorecardStatus so "one incomplete tee, one valid tee" never reads as a flat unusable verdict. */
+  usableTeeCount: number;
 }
 
-/** Small, non-distracting source label for a search result -- "GreenLink Course" covers both manual and bulk-imported library courses, since the distinction isn't meaningful to the end user. */
-export function formatCourseSourceLabel(source: CourseSearchSource): string {
-  return source === 'golfcourseapi' ? 'GolfCourseAPI' : 'GreenLink Course';
+/**
+ * Small, non-distracting source label for a search result. Three cases, not
+ * two: a manual/bulk-imported GreenLink course ("GreenLink Course"), a
+ * GolfCourseAPI course GreenLink has already imported and cached
+ * ("Saved Course" -- courseId is set, so selecting it never needs
+ * GolfCourseAPI again), and a fresh GolfCourseAPI search result GreenLink
+ * hasn't imported yet ("GolfCourseAPI"). Collapsing the last two into one
+ * label is exactly what made two results for the same club -- one already
+ * played, one a brand new duplicate listing -- look identical.
+ */
+export function formatCourseSourceLabel(result: Pick<CourseSearchResult, 'source' | 'courseId'>): string {
+  if (result.source !== 'golfcourseapi') return 'GreenLink Course';
+  return result.courseId !== null ? 'Saved Course' : 'GolfCourseAPI';
 }
 
 export type ImportedCourseTee = Pick<
