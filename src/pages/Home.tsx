@@ -13,6 +13,9 @@ export function Home() {
         <BigButton to="/tournaments" label="Tournament" icon="🏆" />
         <BigButton to="/my-golf" label="My Golf" icon="⛳" />
       </div>
+      <div className={styles.fullWidth}>
+        <BigButton to="/members" label="Members" icon="👥" />
+      </div>
       <CommunityFeed />
     </div>
   );

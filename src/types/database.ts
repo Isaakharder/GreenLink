@@ -19,6 +19,18 @@ export interface Profile {
   updated_at: string;
 }
 
+// One row per GreenLink user (list_members() RPC) -- every profile is
+// currently considered an Active Member; a real membership-status/dues/
+// renewal system can extend this later. Deliberately excludes every other
+// profiles column (username, photo_path, is_admin, timestamps) and never
+// joins email -- this is the public member directory shape, not a profile.
+export interface Member {
+  id: string;
+  first_name: string;
+  last_name: string;
+  completed_rounds_count: number;
+}
+
 export interface Tournament {
   id: string;
   organizer_user_id: string;

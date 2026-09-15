@@ -10,6 +10,7 @@ import { SignUp } from './pages/SignUp';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { Home } from './pages/Home';
+import { Members } from './pages/Members';
 import { Profile } from './pages/Profile';
 import { Settings } from './pages/settings/Settings';
 import { CourseLibrary } from './pages/settings/CourseLibrary';
@@ -60,6 +61,7 @@ export function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/home" element={<Home />} />
+              <Route path="/members" element={<Members />} />
               <Route path="/my-golf" element={<MyGolf />} />
               <Route path="/my-golf/start" element={<StartRound />} />
               <Route path="/my-golf/round/:tournamentId" element={<PersonalRoundShell />}>
