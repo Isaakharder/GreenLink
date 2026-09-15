@@ -4,24 +4,8 @@
   margin-bottom: 0.5rem;
 }
 
-.foundCard {
-  margin-top: 0.75rem;
-}
-
-.foundName {
-  font-weight: 700;
-  margin-bottom: 0;
-}
-
-.foundUsername {
-  color: var(--color-text-muted);
-  margin-bottom: 0.75rem;
-}
-
-.successText {
-  color: #1b8a4a;
-  font-size: 0.875rem;
-  margin: 0.5rem 0;
+.inviteList {
+  margin-bottom: 0.5rem;
 }
 
 .playerRow {

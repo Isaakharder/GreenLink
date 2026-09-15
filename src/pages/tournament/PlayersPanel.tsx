@@ -1,15 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { Avatar } from '../../components/Avatar';
+import { useAuth } from '../../auth/useAuth';
+import { useMembers } from '../../hooks/useMembers';
+import { invitableMembers, resolveInviteStatus } from '../../lib/inviteMembers';
 import type { RosterInvitation, RosterPlayer, RosterTeam } from '../../hooks/useTournamentRoster';
 import styles from './PlayersPanel.module.css';
-
-interface FoundProfile {
-  id: string;
-  username: string;
-  first_name: string;
-  last_name: string;
-}
 
 interface PlayersPanelProps {
   tournamentId: string;
@@ -28,13 +24,10 @@ function teamLabel(teamId: string | null, teams: RosterTeam[]): string {
 }
 
 export function PlayersPanel({ tournamentId, players, invitations, teams, isPreLive, onChange }: PlayersPanelProps) {
-  const [username, setUsername] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [found, setFound] = useState<FoundProfile | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const { user } = useAuth();
+  const { data: members } = useMembers();
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [busyRowId, setBusyRowId] = useState<string | null>(null);
 
@@ -43,35 +36,10 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
   const pendingInvitations = invitations.filter((i) => i.status === 'pending');
   const closedInvitations = invitations.filter((i) => i.status === 'declined' || i.status === 'cancelled');
 
-  async function handleSearch(event: FormEvent) {
-    event.preventDefault();
-    setSearchError(null);
-    setFound(null);
-    setInviteSuccess(false);
-
-    const trimmed = username.trim();
-    if (!trimmed) return;
-
-    setSearching(true);
-    const { data, error } = await supabase.rpc('search_profile_by_username', { p_username: trimmed });
-    setSearching(false);
-
-    if (error) {
-      setSearchError(error.message);
-      return;
-    }
-
-    const match = (Array.isArray(data) ? data[0] : data) as FoundProfile | undefined;
-    if (!match) {
-      setSearchError('No player found with that username.');
-      return;
-    }
-
-    setFound(match);
-  }
+  const invitable = invitableMembers(members ?? [], user?.id);
 
   async function handleInvite(userId: string) {
-    setInviteSubmitting(true);
+    setBusyMemberId(userId);
     setInviteError(null);
 
     const { error } = await supabase.rpc('invite_player', {
@@ -79,16 +47,13 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
       p_invited_user_id: userId,
     });
 
-    setInviteSubmitting(false);
+    setBusyMemberId(null);
 
     if (error) {
       setInviteError(error.message);
       return;
     }
 
-    setInviteSuccess(true);
-    setFound(null);
-    setUsername('');
     onChange();
   }
 
@@ -119,53 +84,49 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
 
   return (
     <div>
-      <h2 className="section-title">Invite Player</h2>
-      <form onSubmit={handleSearch}>
-        <div className="field">
-          <label htmlFor="invite-username">Username</label>
-          <input
-            id="invite-username"
-            value={username}
-            onChange={(event) => {
-              setUsername(event.target.value);
-              setFound(null);
-              setInviteSuccess(false);
-            }}
-            autoCapitalize="none"
-            disabled={!isPreLive}
-          />
-        </div>
-        <button
-          type="submit"
-          className="btn btn-secondary"
-          disabled={searching || !username.trim() || !isPreLive}
-        >
-          {searching ? 'Searching…' : 'Find Player'}
-        </button>
-      </form>
-
+      <h2 className="section-title">Invite Members</h2>
       {!isPreLive && <p className={styles.muted}>Players can only be invited before the tournament starts.</p>}
-      {searchError && <p className="error-text">{searchError}</p>}
+      {inviteError && <p className="error-text">{inviteError}</p>}
 
-      {found && (
-        <div className={`card ${styles.foundCard}`}>
-          <p className={styles.foundName}>
-            {found.first_name} {found.last_name}
-          </p>
-          <p className={styles.foundUsername}>@{found.username}</p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={inviteSubmitting}
-            onClick={() => void handleInvite(found.id)}
-          >
-            {inviteSubmitting ? 'Inviting…' : 'Send Invitation'}
-          </button>
-          {inviteError && <p className="error-text">{inviteError}</p>}
+      {invitable.length === 0 ? (
+        <p className={styles.muted}>No other GreenLink members yet.</p>
+      ) : (
+        // A dedicated wrapper (not just reusing .playerRow at the top level)
+        // so e2e tests can scope to this section specifically -- a member
+        // can legitimately appear again below (Accepted Players, Pending
+        // Invitations, Declined Invitations), and "Invite Members" is the
+        // only section where their *tournament* status has to be
+        // unambiguous from the others.
+        <div className={styles.inviteList}>
+          {invitable.map((member) => {
+            const status = resolveInviteStatus(member.id, players, invitations);
+            return (
+              <div key={member.id} className={styles.playerRow}>
+                <Avatar name={`${member.first_name} ${member.last_name}`} />
+                <div className={styles.playerInfo}>
+                  <p className={styles.playerName}>
+                    {member.first_name} {member.last_name}
+                  </p>
+                  <p className={styles.playerMeta}>@{member.username}</p>
+                </div>
+                {status === 'accepted' && <span className="badge badge-accepted">Accepted ✓</span>}
+                {status === 'pending' && <span className="badge badge-pending">Pending</span>}
+                {status === 'invite' && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-small btn-auto"
+                    disabled={!isPreLive || busyMemberId === member.id}
+                    onClick={() => void handleInvite(member.id)}
+                  >
+                    {busyMemberId === member.id ? 'Inviting…' : 'Invite'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {inviteSuccess && <p className={styles.successText}>Invitation sent.</p>}
       {rowError && <p className="error-text">{rowError}</p>}
 
       <h2 className="section-title">Organizer</h2>
@@ -254,10 +215,10 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
               <button
                 type="button"
                 className="btn btn-secondary btn-small btn-auto"
-                disabled={inviteSubmitting}
+                disabled={busyMemberId === invitation.invitedUserId}
                 onClick={() => void handleInvite(invitation.invitedUserId)}
               >
-                Re-invite
+                {busyMemberId === invitation.invitedUserId ? 'Inviting…' : 'Re-invite'}
               </button>
             )}
           </div>

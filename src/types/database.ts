@@ -21,14 +21,18 @@ export interface Profile {
 
 // One row per GreenLink user (list_members() RPC) -- every profile is
 // currently considered an Active Member; a real membership-status/dues/
-// renewal system can extend this later. Deliberately excludes every other
-// profiles column (username, photo_path, is_admin) beyond created_at
-// (renamed member_since -- the sign-up date, never updated) and never
-// joins email -- this is the public member directory shape, not a profile.
+// renewal system can extend this later. username is included (0034) because
+// it's already deliberately searchable by any authenticated user via
+// search_profile_by_username() -- not a new privacy exposure. Deliberately
+// excludes every other profiles column (photo_path, is_admin) beyond
+// created_at (renamed member_since -- the sign-up date, never updated) and
+// never joins email -- this is the public member directory shape, not a
+// profile.
 export interface Member {
   id: string;
   first_name: string;
   last_name: string;
+  username: string;
   completed_rounds_count: number;
   member_since: string;
 }

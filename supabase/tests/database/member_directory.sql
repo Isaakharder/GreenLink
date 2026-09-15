@@ -1,15 +1,17 @@
 -- ============================================================================
--- pgTAP suite for the member directory (supabase/migrations/0032, 0033).
--- Covers: list_members() returns every profile with the correct
+-- pgTAP suite for the member directory (supabase/migrations/0032, 0033,
+-- 0034). Covers: list_members() returns every profile with the correct
 -- completed_rounds_count -- counting only 'accepted' tournament_players rows
 -- joined to a 'completed' tournament, excluding 'removed' memberships and
 -- non-completed tournaments (draft/upcoming/live/cancelled), counting a
 -- personal round (is_personal = true) exactly like a real tournament -- plus
--- the correct member_since (the profile's own created_at), and never
--- returning email or any other profiles column beyond
--- id/first_name/last_name/member_since. Same fixture/impersonation pattern
--- as manual_course_library.sql / personal_rounds.sql. Creates its own
--- throwaway users/tournaments and rolls back at the end.
+-- the correct member_since (the profile's own created_at) and username
+-- (0034 -- added so the Teams tab can discover/invite members without a
+-- username-search round trip), and never returning email or any other
+-- profiles column beyond id/first_name/last_name/username/member_since.
+-- Same fixture/impersonation pattern as manual_course_library.sql /
+-- personal_rounds.sql. Creates its own throwaway users/tournaments and rolls
+-- back at the end.
 --
 -- Run with: supabase test db
 -- ============================================================================
@@ -19,7 +21,7 @@ begin;
 create extension if not exists pgtap;
 create extension if not exists pgcrypto;
 
-select plan(11);
+select plan(12);
 
 create temp table fixtures (key text primary key, value text);
 
@@ -160,6 +162,12 @@ select is(
 );
 
 select is(
+  (select username from public.list_members() where id = '60000000-0000-0000-0000-000000000001'::uuid),
+  'member_a_test',
+  'username is returned -- not a new privacy exposure, already searchable via search_profile_by_username()'
+);
+
+select is(
   (select member_since::text from public.list_members() where id = '60000000-0000-0000-0000-000000000001'::uuid),
   pg_temp.recall('member_a_created_at'),
   'member_since matches the profile''s own created_at (sign-up date)'
@@ -170,10 +178,10 @@ select is(
 -- list, not just "whatever the query includes"), not just by omission from a
 -- SELECT the RPC happens to run today.
 select ok(
-  (select count(*) = 5 from information_schema.parameters where specific_schema = 'public' and specific_name in (
+  (select count(*) = 6 from information_schema.parameters where specific_schema = 'public' and specific_name in (
     select specific_name from information_schema.routines where routine_schema = 'public' and routine_name = 'list_members'
   ) and parameter_mode = 'OUT'),
-  'list_members() returns exactly 5 output columns -- id, first_name, last_name, completed_rounds_count, member_since'
+  'list_members() returns exactly 6 output columns -- id, first_name, last_name, username, completed_rounds_count, member_since'
 );
 
 select ok(
