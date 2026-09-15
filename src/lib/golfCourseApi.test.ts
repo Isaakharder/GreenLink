@@ -77,24 +77,45 @@ describe('searchGolfCourses error classification', () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
-  it('surfaces the Edge Function\'s own reported kind/message verbatim (e.g. unauthorized)', async () => {
-    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
-    const context = {
-      clone: () => ({
-        json: async () => ({ kind: 'unauthorized', message: 'Your session has expired. Sign in again to search for a course.' }),
-      }),
-    };
-    invokeMock.mockResolvedValue({ data: null, error: { message: 'edge function error', context } });
+  // The Edge Function's actual wire shape is { error: <kind>, message } --
+  // see supabase/functions/golf-course-lookup/index.ts's json({ error:
+  // err.kind, message }, status). One case per kind it can actually send,
+  // so a regression back to expecting { kind, message } (which silently
+  // collapsed every one of these into function_unavailable) fails loudly.
+  const SERVER_REPORTED_CASES: { kind: string; message: string }[] = [
+    { kind: 'unauthorized', message: 'Your session has expired. Sign in again to search for a course.' },
+    { kind: 'not_configured', message: "Course search isn't configured right now. You can still enter the course by hand." },
+    { kind: 'rate_limited', message: 'Course search is temporarily busy. Try again in a moment, or enter the course by hand.' },
+    { kind: 'upstream_unavailable', message: 'GolfCourseAPI is unavailable right now. You can still enter the course by hand.' },
+    { kind: 'internal_error', message: 'Something went wrong on our end. You can still enter the course by hand.' },
+  ];
 
-    await expect(searchGolfCourses('pinehurst')).rejects.toMatchObject({
-      kind: 'unauthorized',
-      message: 'Your session has expired. Sign in again to search for a course.',
-    });
-  });
+  it.each(SERVER_REPORTED_CASES)(
+    "surfaces the Edge Function's own reported $kind verbatim, not function_unavailable",
+    async ({ kind, message }) => {
+      Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+      const context = {
+        clone: () => ({
+          json: async () => ({ error: kind, message }),
+        }),
+      };
+      invokeMock.mockResolvedValue({ data: null, error: { message: 'edge function error', context } });
+
+      await expect(searchGolfCourses('pinehurst')).rejects.toMatchObject({ kind, message });
+    },
+  );
 
   it('classifies as function_unavailable when no parseable response came back at all', async () => {
     Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
     invokeMock.mockResolvedValue({ data: null, error: { message: 'network error', context: undefined } });
+
+    await expect(searchGolfCourses('pinehurst')).rejects.toMatchObject({ kind: 'function_unavailable' });
+  });
+
+  it('classifies as function_unavailable when the response body has no recognized error kind', async () => {
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+    const context = { clone: () => ({ json: async () => ({ something: 'unexpected' }) }) };
+    invokeMock.mockResolvedValue({ data: null, error: { message: 'edge function error', context } });
 
     await expect(searchGolfCourses('pinehurst')).rejects.toMatchObject({ kind: 'function_unavailable' });
   });

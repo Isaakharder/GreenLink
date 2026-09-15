@@ -97,6 +97,24 @@ export class GolfCourseSearchError extends Error implements GolfCourseApiFailure
   }
 }
 
+// The kinds the Edge Function can actually put on the wire (index.ts's
+// json({ error: err.kind, message }, status) and its two literal
+// 'invalid_request' / 'internal_error' responses) -- narrower than
+// GolfCourseApiFailure['kind'], which also has two client-only members
+// (network_offline, function_unavailable) that never come from the server.
+const SERVER_FAILURE_KINDS = new Set<GolfCourseApiFailure['kind']>([
+  'unauthorized',
+  'not_configured',
+  'rate_limited',
+  'upstream_unavailable',
+  'internal_error',
+  'invalid_request',
+]);
+
+function isServerFailureKind(value: unknown): value is GolfCourseApiFailure['kind'] {
+  return typeof value === 'string' && SERVER_FAILURE_KINDS.has(value as GolfCourseApiFailure['kind']);
+}
+
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     throw new GolfCourseSearchError('network_offline', FAILURE_MESSAGES.network_offline);
@@ -113,9 +131,13 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
     const context = (error as { context?: Response }).context;
     if (context) {
       try {
-        const body = (await context.clone().json()) as Partial<GolfCourseApiFailure>;
-        if (body.kind && body.message) {
-          throw new GolfCourseSearchError(body.kind, body.message);
+        // The Edge Function's actual failure shape is { error: <kind>,
+        // message }, not { kind, message } -- GolfCourseApiFailure describes
+        // the *parsed* shape this module works with everywhere else, not
+        // the wire format, so it's read from `error` here and mapped in.
+        const body = (await context.clone().json()) as { error?: unknown; message?: unknown };
+        if (isServerFailureKind(body.error) && typeof body.message === 'string') {
+          throw new GolfCourseSearchError(body.error, body.message);
         }
       } catch (parseErr) {
         if (parseErr instanceof GolfCourseSearchError) throw parseErr;
