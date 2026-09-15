@@ -552,4 +552,63 @@ describe('mergeCourseSearchResults', () => {
     const merged = mergeCourseSearchResults([orchardViewComplete], [exactNameIncompleteDuplicate]);
     expect(merged).toEqual([orchardViewComplete]);
   });
+
+  // --- Regression coverage for Hemlock Golf Club: GreenLink's own manual
+  // course library supplementing an incomplete GolfCourseAPI record. Unlike
+  // Orchard View (an incomplete duplicate of a previously-*imported*
+  // golfcourseapi course), Hemlock's local record is 'manual' -- never
+  // imported from GolfCourseAPI, so it carries no courseId and always has
+  // its own synthetic external_id, never GolfCourseAPI's real one. Dedup
+  // therefore depends entirely on the exact-name-match rule, not identity.
+
+  const hemlockManual: CourseSearchSummary = {
+    externalId: 'manual-hemlock-golf-club',
+    clubName: 'Hemlock Golf Club',
+    courseName: 'Hemlock Golf Club',
+    city: 'Ludington',
+    state: 'MI',
+    country: 'USA',
+    scorecardStatus: 'usable',
+    source: 'manual',
+    courseId: 'hemlock-course-id',
+    externalProvider: null,
+    usableTeeCount: 7,
+  };
+
+  it('drops an incomplete GolfCourseAPI Hemlock listing in favor of the complete GreenLink manual record, on an exact name match', () => {
+    const incompleteApiListing: CourseSearchSummary = {
+      externalId: 'golfcourseapi-hemlock-real-id',
+      clubName: 'Hemlock Golf Club',
+      courseName: 'Hemlock Golf Club',
+      city: 'Ludington',
+      state: 'MI',
+      country: 'USA',
+      scorecardStatus: 'unusable',
+      source: 'golfcourseapi',
+      courseId: null,
+      externalProvider: 'golfcourseapi',
+      usableTeeCount: 0,
+    };
+    const merged = mergeCourseSearchResults([hemlockManual], [incompleteApiListing]);
+    expect(merged).toEqual([hemlockManual]);
+  });
+
+  it('still ranks the complete GreenLink manual record first even when GolfCourseAPI\'s name does not match exactly (dedup misses, but precedence does not depend on it)', () => {
+    const differentlyNamedApiListing: CourseSearchSummary = {
+      externalId: 'golfcourseapi-hemlock-real-id',
+      clubName: 'Hemlock Golf Course', // not an exact match to 'Hemlock Golf Club'
+      courseName: 'Hemlock Golf Course',
+      city: 'Ludington',
+      state: 'MI',
+      country: 'USA',
+      scorecardStatus: 'unusable',
+      source: 'golfcourseapi',
+      courseId: null,
+      externalProvider: 'golfcourseapi',
+      usableTeeCount: 0,
+    };
+    const merged = mergeCourseSearchResults([hemlockManual], [differentlyNamedApiListing]);
+    expect(merged).toHaveLength(2);
+    expect(merged[0]).toBe(hemlockManual);
+  });
 });
