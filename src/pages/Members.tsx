@@ -1,4 +1,5 @@
 import { useMembers } from '../hooks/useMembers';
+import { formatMembershipDuration } from '../lib/memberDirectory';
 import styles from './Members.module.css';
 
 export function Members() {
@@ -24,6 +25,9 @@ export function Members() {
   return (
     <div>
       <h1>Members</h1>
+      <p className={styles.count}>
+        {members.length} {members.length === 1 ? 'member' : 'members'}
+      </p>
       <div className={styles.list}>
         {members.map((member) => (
           // Non-interactive: there's no member profile page to link to yet.
@@ -35,6 +39,7 @@ export function Members() {
               </p>
               <div className={styles.meta}>
                 <span className="badge badge-accepted">Active Member</span>
+                <span>{formatMembershipDuration(member.member_since)}</span>
               </div>
             </div>
             <div className={styles.roundsCount}>

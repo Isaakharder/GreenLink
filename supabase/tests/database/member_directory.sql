@@ -1,13 +1,14 @@
 -- ============================================================================
--- pgTAP suite for the member directory (supabase/migrations/0032).
+-- pgTAP suite for the member directory (supabase/migrations/0032, 0033).
 -- Covers: list_members() returns every profile with the correct
 -- completed_rounds_count -- counting only 'accepted' tournament_players rows
 -- joined to a 'completed' tournament, excluding 'removed' memberships and
 -- non-completed tournaments (draft/upcoming/live/cancelled), counting a
--- personal round (is_personal = true) exactly like a real tournament, and
--- never returning email or any other profiles column beyond
--- id/first_name/last_name. Same fixture/impersonation pattern as
--- manual_course_library.sql / personal_rounds.sql. Creates its own
+-- personal round (is_personal = true) exactly like a real tournament -- plus
+-- the correct member_since (the profile's own created_at), and never
+-- returning email or any other profiles column beyond
+-- id/first_name/last_name/member_since. Same fixture/impersonation pattern
+-- as manual_course_library.sql / personal_rounds.sql. Creates its own
 -- throwaway users/tournaments and rolls back at the end.
 --
 -- Run with: supabase test db
@@ -18,7 +19,20 @@ begin;
 create extension if not exists pgtap;
 create extension if not exists pgcrypto;
 
-select plan(10);
+select plan(11);
+
+create temp table fixtures (key text primary key, value text);
+
+create function pg_temp.remember(p_key text, p_value text) returns void
+language sql security definer as $$
+  insert into fixtures (key, value) values (p_key, p_value)
+  on conflict (key) do update set value = excluded.value;
+$$;
+
+create function pg_temp.recall(p_key text) returns text
+language sql stable security definer as $$
+  select value from fixtures where key = p_key;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: three members.
@@ -85,6 +99,12 @@ begin
   values ('61000000-0000-0000-0000-000000000004', '60000000-0000-0000-0000-000000000002', 'accepted', true);
 
   -- C: a profile that has never played anything.
+
+  -- Captured now, as the table owner (before any `set local role
+  -- authenticated` below) -- profiles' own RLS only allows selecting your
+  -- own row, so reading member A's created_at while impersonating a
+  -- different user later would return no row, not a comparable value.
+  perform pg_temp.remember('member_a_created_at', (select created_at::text from public.profiles where id = '60000000-0000-0000-0000-000000000001'));
 end $$;
 
 -- ---------------------------------------------------------------------------
@@ -139,15 +159,21 @@ select is(
   'last_name is returned'
 );
 
+select is(
+  (select member_since::text from public.list_members() where id = '60000000-0000-0000-0000-000000000001'::uuid),
+  pg_temp.recall('member_a_created_at'),
+  'member_since matches the profile''s own created_at (sign-up date)'
+);
+
 -- No email/username/is_admin/photo_path column exists on the return type at
 -- all -- proven structurally (a function's RETURNS TABLE is a fixed column
 -- list, not just "whatever the query includes"), not just by omission from a
 -- SELECT the RPC happens to run today.
 select ok(
-  (select count(*) = 4 from information_schema.parameters where specific_schema = 'public' and specific_name in (
+  (select count(*) = 5 from information_schema.parameters where specific_schema = 'public' and specific_name in (
     select specific_name from information_schema.routines where routine_schema = 'public' and routine_name = 'list_members'
   ) and parameter_mode = 'OUT'),
-  'list_members() returns exactly 4 output columns -- id, first_name, last_name, completed_rounds_count'
+  'list_members() returns exactly 5 output columns -- id, first_name, last_name, completed_rounds_count, member_since'
 );
 
 select ok(

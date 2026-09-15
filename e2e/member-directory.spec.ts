@@ -40,15 +40,21 @@ test('Members card on Home navigates to the member directory, listing the signed
   await page.waitForURL('**/members');
   await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
 
+  // A running total is shown at the top -- other seeded users exist in this
+  // shared local DB, so only the shape (a positive count) is checked, not an
+  // exact number.
+  await expect(page.getByText(/^\d+ members?$/)).toBeVisible();
+
   // Member rows are plain, non-interactive cards (no profile page to link to
   // yet) -- not buttons/links.
   const memberCard = page.locator('div[class*="card"]', { hasText: fullName });
   await expect(memberCard).toBeVisible();
   await expect(memberCard.getByRole('button')).toHaveCount(0);
   await expect(memberCard.getByText('Active Member')).toBeVisible();
-  // A brand-new user has never played a round.
+  // A brand-new user has never played a round, and just joined today.
   await expect(memberCard.getByText('0', { exact: true })).toBeVisible();
   await expect(memberCard.getByText('rounds played')).toBeVisible();
+  await expect(memberCard.getByText('New member')).toBeVisible();
 
   // The directory must never leak the account's email anywhere on the page.
   await expect(page.getByText(email)).toHaveCount(0);
