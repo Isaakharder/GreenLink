@@ -22,7 +22,7 @@ export interface AuthErrorInfo {
 }
 
 export const AUTH_ERROR_MESSAGES: Record<AuthErrorKind, string> = {
-  rate_limited: 'Too many confirmation emails have been requested. Please wait a few minutes and try again.',
+  rate_limited: 'Too many requests. Please wait a few minutes and try again.',
   duplicate_email: 'An account with that email already exists. Try signing in instead.',
   invalid_email: 'Please enter a valid email address.',
   weak_password: 'That password is too weak. Use at least 6 characters.',

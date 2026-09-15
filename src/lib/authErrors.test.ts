@@ -8,9 +8,7 @@ describe('describeAuthError', () => {
     const result = describeAuthError(error);
 
     expect(result.kind).toBe('rate_limited');
-    expect(result.message).toBe(
-      'Too many confirmation emails have been requested. Please wait a few minutes and try again.',
-    );
+    expect(result.message).toBe('Too many requests. Please wait a few minutes and try again.');
     expect(result.message).not.toMatch(/email rate limit exceeded/i);
     expect(result.message.toLowerCase()).not.toContain('rate limit exceeded');
   });
