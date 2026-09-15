@@ -22,6 +22,27 @@ async function seedUser(tag: string) {
   return { email, password, userId: data.user!.id };
 }
 
+/**
+ * Archives every manual course this test's seeded user created (safe
+ * regardless of whether a course was ever referenced by a tournament --
+ * unlike deleting, archiving never touches golf_course_id/golf_course_tee_id
+ * foreign keys). Run at the end of every test that publishes a real course
+ * through the UI, so this suite's own published courses -- and their
+ * city/club-name fields -- can never accumulate in the local Postgres
+ * volume and leak into a *later* run's find_similar_courses()/
+ * search_courses() results (both filter archived_at is null). Each test
+ * seeds a brand-new, uniquely-stamped user via seedUser(), so scoping by
+ * created_by is exact -- never touches another test's data.
+ */
+async function archiveCoursesCreatedBy(userId: string): Promise<void> {
+  const { error } = await admin()
+    .from('golf_courses')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('created_by', userId)
+    .is('archived_at', null);
+  if (error) throw error;
+}
+
 async function signIn(page: Page, email: string, password: string) {
   await page.goto('/sign-in');
   await page.fill('#email', email);
@@ -74,7 +95,12 @@ test.describe('manual course library', () => {
     const clubName = `E2E Library Club ${stamp}`;
     await page.fill('#clubName', clubName);
     await page.fill('#courseName', `Main Layout ${stamp}`);
-    await page.fill('#city', 'Testville');
+    // Stamped like clubName/courseName -- a bare "Testville" would exactly
+    // match (find_similar_courses matches city case-insensitively) every
+    // other published course this suite has ever left behind with that same
+    // literal city, unexpectedly popping the duplicate-warning modal instead
+    // of publishing straight through.
+    await page.fill('#city', `Testville ${stamp}`);
     await page.fill('#state', 'NC');
     await page.fill('#country', 'USA');
     await page.getByRole('button', { name: 'Next: Tees' }).click();
@@ -105,6 +131,11 @@ test.describe('manual course library', () => {
     await expect(page.getByText('Archived', { exact: true })).toBeVisible({ timeout: 10_000 });
     await page.getByRole('button', { name: 'Restore' }).click();
     await expect(page.getByText('Archived', { exact: true })).toHaveCount(0, { timeout: 10_000 });
+
+    // Leaves the course archived so it never lingers as a real, findable
+    // published course for a later run's find_similar_courses()/
+    // search_courses() to match against (see archiveCoursesCreatedBy).
+    await archiveCoursesCreatedBy(owner.userId);
   });
 
   test('Save Draft keeps a course out of search until Publish is used', async ({ page }) => {
@@ -159,6 +190,8 @@ test.describe('manual course library', () => {
     await page.goto('/my-golf/start');
     await page.getByPlaceholder('Search by course or club name…').fill(clubName);
     await expect(page.getByRole('button', { name: new RegExp(clubName) })).toBeVisible({ timeout: 10_000 });
+
+    await archiveCoursesCreatedBy(owner.userId);
   });
 
   test('publishing near a similarly-named existing course shows a duplicate warning', async ({ page }) => {
@@ -172,7 +205,12 @@ test.describe('manual course library', () => {
     await page.goto('/settings/courses/new');
     await page.fill('#clubName', clubName);
     await page.fill('#courseName', `Original Layout ${stamp}`);
-    await page.fill('#city', 'Duplicateville');
+    // Stamped for the same reason as the CRUD test's city above -- a bare
+    // "Duplicateville" would exactly match a course this same spec left
+    // behind on a previous run, popping the duplicate-warning modal on
+    // *this* publish (which the test doesn't expect yet) instead of on the
+    // second course's, which is the one actually under test.
+    await page.fill('#city', `Duplicateville ${stamp}`);
     await page.getByRole('button', { name: 'Next: Tees' }).click();
     await fillFirstTee(page, { teeName: 'White', holeCount: 9, parsToFill: 9 });
     await page.getByRole('button', { name: 'Next: Review' }).click();
@@ -194,6 +232,8 @@ test.describe('manual course library', () => {
     await page.getByRole('button', { name: 'Continue Creating' }).click();
     await page.waitForURL('**/settings/courses');
     await expect(page.getByText(`Second Layout ${stamp}`)).toBeVisible({ timeout: 10_000 });
+
+    await archiveCoursesCreatedBy(owner.userId);
   });
 
   test("an unrelated user cannot edit or archive someone else's course, but an administrator can", async () => {
@@ -277,7 +317,7 @@ test.describe('manual course library', () => {
         external_id: `manual-e2e-use-${stamp}`,
         club_name: clubName,
         course_name: 'Main Layout',
-        city: 'Testville',
+        city: `Testville ${stamp}`,
         state: 'NC',
         country: 'USA',
         source: 'manual',
@@ -314,7 +354,7 @@ test.describe('manual course library', () => {
                   externalId: `manual-e2e-use-${stamp}`,
                   clubName,
                   courseName: 'Main Layout',
-                  city: 'Testville',
+                  city: `Testville ${stamp}`,
                   state: 'NC',
                   country: 'USA',
                   scorecardStatus: 'usable',
@@ -328,7 +368,7 @@ test.describe('manual course library', () => {
         if (body.action === 'import') {
           await route.fulfill({
             json: {
-              course: { id: courseId, club_name: clubName, course_name: 'Main Layout', city: 'Testville', state: 'NC', country: 'USA' },
+              course: { id: courseId, club_name: clubName, course_name: 'Main Layout', city: `Testville ${stamp}`, state: 'NC', country: 'USA' },
               tees: [{ id: teeId, tee_name: 'Blue', gender: 'unisex', number_of_holes: 18, par_total: 72, course_rating: null, slope_rating: null }],
             },
           });
@@ -366,6 +406,11 @@ test.describe('manual course library', () => {
     await page.fill('#tournamentDate', new Date().toISOString().slice(0, 10));
     await page.getByRole('button', { name: 'Create Tournament' }).click();
     await page.waitForURL('**/tournaments/**/overview', { timeout: 10_000 });
+
+    // Archiving (not deleting) is required here regardless -- the
+    // personal round and tournament created above hold non-cascading
+    // foreign keys to this course/tee.
+    await archiveCoursesCreatedBy(owner.userId);
   });
 
   test('the course creator can build and publish an 18-hole course on a phone-sized viewport', async ({ page }) => {
@@ -405,6 +450,8 @@ test.describe('manual course library', () => {
     await publishButton.click();
     await page.waitForURL('**/settings/courses');
     await expect(page.getByText(clubName)).toBeVisible({ timeout: 10_000 });
+
+    await archiveCoursesCreatedBy(owner.userId);
   });
 
   test('warns before leaving the form with unsaved changes', async ({ page }) => {

@@ -62,3 +62,22 @@ export function findFirstUnscoredHole(holeNumbers: number[], scoredHoleNumbers: 
   // not necessarily the last hole in the round.
   return Math.max(...sortedHoles);
 }
+
+/**
+ * Restore priority for which hole the Scorecard tab opens on. A saved
+ * position (wherever the user last navigated to -- e.g. mid-shotgun-start
+ * round, or simply the hole they were looking at when the app was closed)
+ * always wins over the derived first-unscored-hole default. The saved
+ * position is only disregarded if it no longer belongs to this round's hole
+ * list (e.g. a manual scorecard was re-entered with a different hole count).
+ */
+export function resolveInitialHole(
+  savedHoleNumber: number | null,
+  holeNumbers: number[],
+  scoredHoleNumbers: number[],
+): number {
+  if (savedHoleNumber !== null && holeNumbers.includes(savedHoleNumber)) {
+    return savedHoleNumber;
+  }
+  return findFirstUnscoredHole(holeNumbers, scoredHoleNumbers);
+}

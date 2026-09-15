@@ -142,6 +142,22 @@ export function membershipCacheKey(tournamentId: string, userId: string): string
   return `${tournamentId}_${userId}`;
 }
 
+// The scorecard's "which hole am I currently viewing" UI state -- personal
+// to a device+account, never shared/synced between teammates. One row per
+// tournament+user so a player in multiple concurrent tournaments (or a
+// tournament plus a personal round) gets an independent position in each.
+export interface ScorecardPosition {
+  id: string; // `${tournamentId}_${userId}`
+  tournamentId: string;
+  userId: string;
+  holeNumber: number;
+  updatedAt: string;
+}
+
+export function scorecardPositionKey(tournamentId: string, userId: string): string {
+  return `${tournamentId}_${userId}`;
+}
+
 class GreenLinkDB extends Dexie {
   cachedTournaments!: Table<CachedTournament, string>;
   cachedMemberships!: Table<CachedMembership, string>;
@@ -153,6 +169,7 @@ class GreenLinkDB extends Dexie {
   pendingScoreOperations!: Table<PendingScoreOperation, string>;
   cachedMessages!: Table<CachedMessage, string>;
   pendingMessages!: Table<PendingMessage, string>;
+  scorecardPositions!: Table<ScorecardPosition, string>;
 
   constructor() {
     super('greenlink');
@@ -221,6 +238,26 @@ class GreenLinkDB extends Dexie {
         'operationUuid, tournamentId, state, createdAt, [tournamentId+teamId+holeNumber]',
       cachedMessages: 'id, tournamentId, [tournamentId+createdAt]',
       pendingMessages: 'operationUuid, tournamentId, state, createdAt',
+    });
+
+    // v5: adds scorecardPositions -- persists which hole the Scorecard tab
+    // was showing per tournament+user, so closing/backgrounding the app,
+    // refreshing, or navigating away and back restores the exact hole
+    // instead of resetting to the first-unscored-hole default. Local-only
+    // device state, never synced to the server.
+    this.version(5).stores({
+      cachedTournaments: 'id, status',
+      cachedMemberships: 'id, tournamentId',
+      cachedTeams: 'id, tournamentId',
+      cachedHoles: 'id, tournamentId, [tournamentId+holeNumber]',
+      cachedScores: 'id, tournamentId, teamId, [tournamentId+teamId+holeNumber]',
+      cachedPlayers: 'id, tournamentId',
+      cachedDownloads: 'tournamentId',
+      pendingScoreOperations:
+        'operationUuid, tournamentId, state, createdAt, [tournamentId+teamId+holeNumber]',
+      cachedMessages: 'id, tournamentId, [tournamentId+createdAt]',
+      pendingMessages: 'operationUuid, tournamentId, state, createdAt',
+      scorecardPositions: 'id, tournamentId, userId',
     });
   }
 }

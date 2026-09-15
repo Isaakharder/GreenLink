@@ -148,7 +148,17 @@ export async function clearPrivateCache(): Promise<void> {
 export async function removeCachedTournamentData(tournamentId: string): Promise<void> {
   await db.transaction(
     'rw',
-    [db.cachedTournaments, db.cachedMemberships, db.cachedTeams, db.cachedHoles, db.cachedScores, db.cachedPlayers, db.cachedDownloads, db.cachedMessages],
+    [
+      db.cachedTournaments,
+      db.cachedMemberships,
+      db.cachedTeams,
+      db.cachedHoles,
+      db.cachedScores,
+      db.cachedPlayers,
+      db.cachedDownloads,
+      db.cachedMessages,
+      db.scorecardPositions,
+    ],
     async () => {
       await Promise.all([
         db.cachedTournaments.delete(tournamentId),
@@ -159,6 +169,10 @@ export async function removeCachedTournamentData(tournamentId: string): Promise<
         db.cachedPlayers.where('tournamentId').equals(tournamentId).delete(),
         db.cachedDownloads.delete(tournamentId),
         db.cachedMessages.where('tournamentId').equals(tournamentId).delete(),
+        // Safe to drop with the rest of this tournament's read cache --
+        // never touches pendingScoreOperations, so unsynced scores are
+        // unaffected regardless of whether this position row existed.
+        db.scorecardPositions.where('tournamentId').equals(tournamentId).delete(),
       ]);
     },
   );

@@ -7,7 +7,8 @@ import { useLeaderboardData } from '../../hooks/useLeaderboardData';
 import { useAuth } from '../../auth/useAuth';
 import { useConnectionState } from '../../hooks/useConnectionState';
 import { formatRelativeToPar, formatTeamName } from '../../lib/leaderboard';
-import { computeHoleStatus, computeQuickScoreStrokes, findFirstUnscoredHole, type HoleStatus } from '../../lib/teamMath';
+import { computeHoleStatus, computeQuickScoreStrokes, resolveInitialHole, type HoleStatus } from '../../lib/teamMath';
+import { getSavedHole, saveCurrentHole } from '../../lib/scorecardPosition';
 import { useProfile } from '../../hooks/useProfile';
 import { ConflictBanner } from './ConflictBanner';
 import type { TournamentAccess } from '../../hooks/useTournamentAccess';
@@ -112,14 +113,50 @@ export function ScorecardTab() {
   const [selectedHole, setSelectedHole] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [dismissedConflictHole, setDismissedConflictHole] = useState<number | null>(null);
-  const initializedRef = useRef(false);
+  const userId = user?.id ?? null;
+  // Tracks which tournament+user we've already restored a position for, so
+  // a later re-render (e.g. scores refetching, a realtime leaderboard
+  // update) never re-runs the restore and stomps on wherever the user has
+  // since navigated. Keyed rather than a plain boolean so switching to a
+  // different tournament/user without this component unmounting (its
+  // Outlet parent can do this if a cached copy renders with no loading
+  // gap -- see useTournamentAccess) still triggers a fresh restore instead
+  // of leaking the previous tournament's hole number into this one.
+  const restoredForRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!initializedRef.current && holeNumbers.length > 0) {
-      setSelectedHole(findFirstUnscoredHole(holeNumbers, scoredHoleNumbers));
-      initializedRef.current = true;
+    const tournamentId = tournament?.id;
+    const key = tournamentId && userId ? `${tournamentId}_${userId}` : null;
+
+    if (restoredForRef.current !== key) {
+      // Switching tournament/user (or losing one): drop any stale hole
+      // number immediately so it can never be shown against the wrong round.
+      setSelectedHole(null);
     }
-  }, [holeNumbers, scoredHoleNumbers]);
+
+    if (!tournamentId || !userId || holeNumbers.length === 0) return;
+    if (restoredForRef.current === key) return;
+
+    // The ref is claimed only once the lookup actually completes (not
+    // synchronously here) -- React StrictMode's dev-mode mount/cleanup/
+    // remount double-invokes this effect, and claiming eagerly meant the
+    // first invocation's cleanup could cancel it after already marking the
+    // key "restored", leaving the second (real) invocation's early-return
+    // guard skip doing the lookup at all -- selectedHole stuck at null
+    // forever. Checking again after the await, instead, means whichever
+    // invocation actually finishes uncancelled is the one that claims it.
+    let cancelled = false;
+    void (async () => {
+      const saved = await getSavedHole(tournamentId, userId);
+      if (cancelled || restoredForRef.current === key) return;
+      restoredForRef.current = key;
+      setSelectedHole(resolveInitialHole(saved, holeNumbers, scoredHoleNumbers));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tournament?.id, userId, holeNumbers, scoredHoleNumbers]);
 
   if (!tournament) return null;
 
@@ -174,6 +211,9 @@ export function ScorecardTab() {
     setSelectedHole(n);
     setPickerOpen(false);
     setDismissedConflictHole(null);
+    // Written locally and immediately -- no network round trip, and it must
+    // survive the app being closed a moment later.
+    if (tournament && userId) void saveCurrentHole(tournament.id, userId, n);
   }
 
   function goPrev() {

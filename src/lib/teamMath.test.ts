@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { computeAutoTeamCount, computeHoleStatus, computeQuickScoreStrokes, findFirstUnscoredHole } from './teamMath';
+import {
+  computeAutoTeamCount,
+  computeHoleStatus,
+  computeQuickScoreStrokes,
+  findFirstUnscoredHole,
+  resolveInitialHole,
+} from './teamMath';
 
 describe('computeAutoTeamCount', () => {
   it('creates enough teams to cover every accepted player (8 players, size 2 -> 4 teams)', () => {
@@ -69,6 +75,29 @@ describe('findFirstUnscoredHole', () => {
 
   it('returns 1 when there are no holes at all', () => {
     expect(findFirstUnscoredHole([], [])).toBe(1);
+  });
+});
+
+describe('resolveInitialHole', () => {
+  it('prefers the saved position over the first-unscored-hole default', () => {
+    // Holes 4 and 8 are unscored, but the user is physically on hole 13
+    // (e.g. a shotgun start) -- the saved position must win.
+    const holes = Array.from({ length: 18 }, (_, i) => i + 1);
+    const scored = holes.filter((n) => n !== 4 && n !== 8);
+    expect(resolveInitialHole(13, holes, scored)).toBe(13);
+  });
+
+  it('falls back to the first-unscored-hole default when there is no saved position', () => {
+    expect(resolveInitialHole(null, [1, 2, 3, 4], [1, 2])).toBe(3);
+  });
+
+  it('falls back when the saved hole no longer belongs to this round (e.g. a re-entered scorecard with fewer holes)', () => {
+    expect(resolveInitialHole(13, [1, 2, 3, 4], [])).toBe(1);
+  });
+
+  it('honors a saved position of hole 10 for a shotgun start with nothing scored yet', () => {
+    const holes = Array.from({ length: 18 }, (_, i) => i + 1);
+    expect(resolveInitialHole(10, holes, [])).toBe(10);
   });
 });
 
