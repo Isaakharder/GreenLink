@@ -59,6 +59,9 @@ export function SignIn() {
         </button>
       </form>
       <p className={styles.switch}>
+        <Link to="/forgot-password">Forgot password?</Link>
+      </p>
+      <p className={styles.switch}>
         Don&apos;t have an account? <Link to="/sign-up">Sign Up</Link>
       </p>
     </div>

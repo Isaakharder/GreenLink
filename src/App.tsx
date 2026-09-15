@@ -6,6 +6,8 @@ import { AppShell } from './components/AppShell';
 import { LoggedOutHome } from './pages/LoggedOutHome';
 import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { Home } from './pages/Home';
 import { Profile } from './pages/Profile';
 import { Settings } from './pages/settings/Settings';
@@ -45,6 +47,8 @@ export function App() {
           <Route path="/" element={<RootRoute />} />
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/sign-up" element={<SignUp />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
