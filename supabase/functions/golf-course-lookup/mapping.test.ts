@@ -95,6 +95,37 @@ describe('countUsableTees', () => {
   it('excludes an unusable tee from the count without zeroing out the usable ones', () => {
     expect(countUsableTees({ male: [eighteenHoleTee, { ...eighteenHoleTee, holes: [] }] })).toBe(1);
   });
+
+  // --- Regression coverage for the production "TypeError: male is not
+  // iterable" incident: countUsableTees did `tees?.male ?? []` then spread
+  // it, which only substitutes [] for null/undefined and throws on any
+  // other non-array value. The exact raw payload GolfCourseAPI sent isn't
+  // recoverable from the server log (it only captured the exception, not
+  // the response body), so these cover every shape a JSON API could
+  // plausibly send in an array's place, per normalizeTeeGroup's contract.
+
+  it('does not crash, and preserves the tee, when male is a single tee object sent bare instead of wrapped in an array', () => {
+    expect(countUsableTees({ male: eighteenHoleTee as unknown as GolfCourseApiTee[] })).toBe(1);
+  });
+
+  it('does not crash, and preserves every tee, when male is an object keyed by tee name instead of an array', () => {
+    const keyedByName = { Blue: eighteenHoleTee, White: nineHoleTee } as unknown as GolfCourseApiTee[];
+    expect(countUsableTees({ male: keyedByName })).toBe(2);
+  });
+
+  it('does not crash when male is an empty object {} standing in for "no tees of this gender"', () => {
+    expect(countUsableTees({ male: {} as unknown as GolfCourseApiTee[] })).toBe(0);
+  });
+
+  it('does not crash when male is a wholly unexpected primitive (e.g. false or a string)', () => {
+    expect(countUsableTees({ male: false as unknown as GolfCourseApiTee[] })).toBe(0);
+    expect(countUsableTees({ male: 'none' as unknown as GolfCourseApiTee[] })).toBe(0);
+  });
+
+  it('drops a malformed entry inside an otherwise-valid tees array instead of crashing the whole count', () => {
+    const malformed = [eighteenHoleTee, null, 'garbage'] as unknown as GolfCourseApiTee[];
+    expect(countUsableTees({ male: malformed })).toBe(1);
+  });
 });
 
 describe('toGolfCourseRow', () => {
@@ -144,6 +175,20 @@ describe('isTeeUsable', () => {
   it('rejects a tee where a hole has a zero or negative par', () => {
     const holesWithZeroPar = eighteenHoleTee.holes.map((hole, i) => (i === 0 ? { ...hole, par: 0 } : hole));
     expect(isTeeUsable({ ...eighteenHoleTee, holes: holesWithZeroPar })).toBe(false);
+  });
+
+  it('rejects rather than crashes on a malformed entry whose holes is not an array', () => {
+    expect(isTeeUsable({ tee_name: 'Blue', holes: 'not-an-array' } as unknown as GolfCourseApiTee)).toBe(false);
+  });
+
+  it('rejects rather than crashes on null/undefined', () => {
+    expect(isTeeUsable(null)).toBe(false);
+    expect(isTeeUsable(undefined)).toBe(false);
+  });
+
+  it('rejects rather than crashes on a holes array containing a null entry', () => {
+    const holesWithNullEntry = [...eighteenHoleTee.holes.slice(0, 17), null];
+    expect(isTeeUsable({ ...eighteenHoleTee, holes: holesWithNullEntry as unknown as GolfCourseApiTee['holes'] })).toBe(false);
   });
 });
 
@@ -266,6 +311,30 @@ describe('flattenTees', () => {
     expect(flattened).toHaveLength(1);
     expect(flattened[0].tee.holes).toHaveLength(18);
     expect(flattened[0].tee.holes).toEqual(eighteenHoleTee.holes);
+  });
+
+  // --- Regression coverage for the production "TypeError: male is not
+  // iterable" incident (same underlying shape mismatch as countUsableTees
+  // above, on the import path instead of search).
+
+  it('imports a course whose male tee was sent bare instead of wrapped in an array, instead of crashing the import', () => {
+    const detail: GolfCourseApiCourseDetail = {
+      id: 1,
+      club_name: 'Club',
+      course_name: 'Course',
+      tees: { male: eighteenHoleTee as unknown as GolfCourseApiTee[] },
+    };
+    const flattened = flattenTees(detail);
+    expect(flattened).toHaveLength(1);
+    expect(flattened[0]).toEqual({ gender: 'male', tee: eighteenHoleTee });
+  });
+
+  it('imports every tee from a course whose male tees were sent as an object keyed by tee name instead of an array', () => {
+    const keyedByName = { Blue: eighteenHoleTee, White: nineHoleTee } as unknown as GolfCourseApiTee[];
+    const detail: GolfCourseApiCourseDetail = { id: 1, club_name: 'Club', course_name: 'Course', tees: { male: keyedByName } };
+    const flattened = flattenTees(detail);
+    expect(flattened).toHaveLength(2);
+    expect(flattened.map((f) => f.tee.tee_name).sort()).toEqual(['Blue', 'White']);
   });
 });
 

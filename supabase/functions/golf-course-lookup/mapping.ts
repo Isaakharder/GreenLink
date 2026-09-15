@@ -70,9 +70,46 @@ export interface GolfCourseApiCourseDetail {
 // optional -- the scoring system doesn't need them.
 // ---------------------------------------------------------------------------
 
-export function isTeeUsable(tee: GolfCourseApiTee): boolean {
-  if (tee.holes.length !== 9 && tee.holes.length !== 18) return false;
-  return tee.holes.every((hole) => typeof hole.par === 'number' && Number.isFinite(hole.par) && hole.par > 0);
+/**
+ * tees.male/tees.female are typed above as GolfCourseApiTee[] | null, but
+ * that's the documented/usual shape, not a guarantee -- production has
+ * actually sent a non-array, non-nullish value here (confirmed via a real
+ * "male is not iterable" crash in countUsableTees, where the previous code
+ * did `tees?.male ?? []` and then spread it, which only substitutes the []
+ * fallback for null/undefined and throws on anything else non-iterable).
+ * Handles every shape a JSON API could plausibly send instead of the
+ * expected array, without ever silently discarding real tee data:
+ *   - array (the expected/documented case): passed through as-is.
+ *   - a single tee sent bare instead of wrapped in a one-element array
+ *     (recognizable by its own `holes` array): wrapped in one.
+ *   - an object keyed by tee name (e.g. { Blue: {...}, White: {...} })
+ *     instead of an array: its values are the actual tees.
+ *   - an empty object {} standing in for "no tees of this gender" (a common
+ *     JSON-serialization artifact for an empty collection): Object.values
+ *     naturally yields [] here too, same as the array case.
+ *   - null/undefined/anything else (string, number, boolean): [].
+ */
+function normalizeTeeGroup(value: unknown): GolfCourseApiTee[] {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') {
+    if (Array.isArray((value as { holes?: unknown }).holes)) {
+      return [value as GolfCourseApiTee];
+    }
+    return Object.values(value as Record<string, unknown>) as GolfCourseApiTee[];
+  }
+  return [];
+}
+
+// tee/hole defensively checked (not just cast through GolfCourseApiTee) so
+// one malformed entry -- from normalizeTeeGroup's object-values fallback, or
+// just bad upstream data -- degrades to "not usable" instead of throwing and
+// taking down the rest of the search/import with it.
+export function isTeeUsable(tee: unknown): boolean {
+  const holes = (tee as Partial<GolfCourseApiTee> | null)?.holes;
+  if (!Array.isArray(holes)) return false;
+  if (holes.length !== 9 && holes.length !== 18) return false;
+  return holes.every((hole) => typeof hole?.par === 'number' && Number.isFinite(hole.par) && hole.par > 0);
 }
 
 export function hasUsableTees(tees: GolfCourseApiCourseDetail['tees'] | undefined | null): boolean {
@@ -81,8 +118,8 @@ export function hasUsableTees(tees: GolfCourseApiCourseDetail['tees'] | undefine
 
 /** How many of a course's tees (male + female) actually pass isTeeUsable() -- used both for the 'usable'/'unusable' label and as part of a search result's identity, so "one incomplete tee, one valid tee" is never collapsed into a flat unusable verdict. */
 export function countUsableTees(tees: GolfCourseApiCourseDetail['tees'] | undefined | null): number {
-  const male = tees?.male ?? [];
-  const female = tees?.female ?? [];
+  const male = normalizeTeeGroup(tees?.male);
+  const female = normalizeTeeGroup(tees?.female);
   return [...male, ...female].filter(isTeeUsable).length;
 }
 
@@ -279,8 +316,8 @@ export interface TeeInput {
  * internal_error instead of "this tee has no usable data".
  */
 export function flattenTees(detail: GolfCourseApiCourseDetail): TeeInput[] {
-  const male = (detail.tees?.male ?? []).map((tee) => ({ gender: 'male' as const, tee }));
-  const female = (detail.tees?.female ?? []).map((tee) => ({ gender: 'female' as const, tee }));
+  const male = normalizeTeeGroup(detail.tees?.male).map((tee) => ({ gender: 'male' as const, tee }));
+  const female = normalizeTeeGroup(detail.tees?.female).map((tee) => ({ gender: 'female' as const, tee }));
   return [...male, ...female].filter(({ tee }) => isTeeUsable(tee));
 }
 
