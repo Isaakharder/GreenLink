@@ -25,13 +25,14 @@
   font-weight: 700;
 }
 
+/* auto-fit/minmax rather than a fixed viewport breakpoint: each column
+   never renders narrower than the minmax minimum, so the row naturally
+   stacks to one column only when it genuinely wouldn't fit comfortably,
+   and stays side by side otherwise -- "only if they comfortably fit". */
 .latLngRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   gap: 0.75rem;
-}
-
-.latLngRow .field {
-  flex: 1;
 }
 
 .meta {
@@ -51,6 +52,11 @@
   gap: 0.5rem;
 }
 
+.teeSummaryHeader strong {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
 .teeSummaryActions {
   display: flex;
   flex-wrap: wrap;
@@ -58,13 +64,16 @@
   margin-top: 0.5rem;
 }
 
+/* Shared by both tee-level field pairs (Gender/Holes and Course Rating/
+   Slope Rating) -- same auto-fit reasoning as .latLngRow above. Gender/
+   Holes' <select> content is narrow enough to stay side by side at every
+   supported phone width; Course Rating/Slope Rating's wider inputs+labels
+   stack on the narrowest ones -- both from the same rule, no per-pair
+   special-casing needed. */
 .teeFieldsRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   gap: 0.75rem;
-}
-
-.teeFieldsRow .field {
-  flex: 1;
 }
 
 .teeEditorHeader {
@@ -72,6 +81,12 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.75rem;
+  gap: 0.5rem;
+}
+
+.teeEditorHeader strong {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .stepNavRow {
@@ -79,6 +94,10 @@
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
   margin: 1rem 0;
+}
+
+.stepNavRow > * {
+  min-width: 0;
 }
 
 /* ---- Current-hole card (mirrors ScorecardTab's hole card layout) ---- */
@@ -123,6 +142,7 @@
 }
 
 .parButton {
+  min-width: 0;
   min-height: var(--touch-target);
   border-radius: var(--radius);
   border: 1.5px solid var(--color-border);
@@ -149,6 +169,7 @@
 }
 
 .pickerItem {
+  min-width: 0;
   min-height: var(--touch-target);
   border-radius: var(--radius);
   border: 1px solid var(--color-border);

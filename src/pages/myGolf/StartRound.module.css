@@ -46,21 +46,27 @@
   border-color: var(--color-brand);
 }
 
+/* Grid, not flex: a plain flex row here (as it used to be) leaves each
+   .field with the browser's automatic min-content floor -- driven by the
+   <input>'s own intrinsic width -- as its shrink limit, so three items
+   (hole number + two number inputs) repeated for every hole overflow a
+   phone-width card. minmax(auto, ...) lets the hole-number column size to
+   its own short content while the two field columns actually shrink to
+   fit; .field's own min-width: 0 (global) does the rest. */
 .manualHoleRow {
-  display: flex;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: minmax(2.75rem, auto) 1fr 1fr;
+  align-items: end;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
 .manualHoleRow .field {
   margin-bottom: 0;
-  flex: 1;
 }
 
 .manualHoleNumber {
   font-weight: 700;
   font-size: 0.85rem;
-  min-width: 3.25rem;
   padding-bottom: 0.75rem;
 }

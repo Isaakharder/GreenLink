@@ -74,6 +74,16 @@ p {
   flex-direction: column;
   gap: 0.375rem;
   margin-bottom: 1rem;
+  /* Lets .field shrink below its content's intrinsic width whenever it's
+     used as a flex/grid row item (two fields side by side) -- without this,
+     the browser's automatic minimum size for a flex/grid item falls back to
+     its min-content width, which for a bare <input>/<select> is its own
+     browser-default intrinsic width (~170-190px), so a row of two such
+     fields refuses to shrink and overflows a phone-width container even
+     though there's technically a shrink-eligible flex/grid track. No effect
+     when .field is in normal block flow (the common case), since min-width
+     only constrains flex/grid item sizing. */
+  min-width: 0;
 }
 
 .field label {
@@ -92,6 +102,11 @@ p {
   background: var(--color-surface);
   color: var(--color-text);
   font-family: inherit;
+  /* Explicit rather than relying solely on flex column stretch to fill
+     .field's width -- fills correctly regardless of layout mode, and
+     guarantees the control itself never renders wider than its container. */
+  width: 100%;
+  min-width: 0;
 }
 
 .field input,
