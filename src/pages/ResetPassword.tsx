@@ -7,7 +7,7 @@ import styles from './AuthForm.module.css';
 
 export function ResetPassword() {
   const navigate = useNavigate();
-  const { session, loading } = useAuth();
+  const { session, loading, completePasswordRecovery } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +36,10 @@ export function ResetPassword() {
         return;
       }
 
+      // The password is actually changed now -- from this point on the
+      // session is a normal login, so RootRoute/ProtectedRoute should treat
+      // it as one.
+      completePasswordRecovery();
       navigate('/home', { replace: true });
     } finally {
       submittingRef.current = false;

@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { useAuth } from './auth/useAuth';
 import { ProtectedRoute } from './auth/ProtectedRoute';
+import { resolveRootRouteOutcome } from './auth/routing';
 import { AppShell } from './components/AppShell';
 import { LoggedOutHome } from './pages/LoggedOutHome';
 import { SignIn } from './pages/SignIn';
@@ -26,17 +27,23 @@ import { LiveScoreTab } from './pages/tournament/LiveScoreTab';
 import { SettingsTab } from './pages/tournament/SettingsTab';
 
 function RootRoute() {
-  const { session, loading } = useAuth();
+  const { session, loading, isPasswordRecovery } = useAuth();
+  const outcome = resolveRootRouteOutcome({ loading, hasSession: !!session, isPasswordRecovery });
 
-  if (loading) {
-    return <div className="page-status">Loading…</div>;
+  switch (outcome) {
+    case 'loading':
+      return <div className="page-status">Loading…</div>;
+    // A password-recovery link can land here (e.g. via the wildcard route
+    // below, or a redirect URL mismatch) with a session already established
+    // -- that must not be treated as a normal login and sent to /home before
+    // the user has actually set a new password.
+    case 'recovery':
+      return <Navigate to="/reset-password" replace />;
+    case 'home':
+      return <Navigate to="/home" replace />;
+    case 'logged-out':
+      return <LoggedOutHome />;
   }
-
-  if (session) {
-    return <Navigate to="/home" replace />;
-  }
-
-  return <LoggedOutHome />;
 }
 
 export function App() {
