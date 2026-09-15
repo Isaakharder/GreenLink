@@ -123,7 +123,7 @@ test.describe('sign-up error handling', () => {
     const button = signUpButton(page);
     await button.click();
 
-    await expect(page.getByText(/Too many confirmation emails/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Too many requests/)).toBeVisible({ timeout: 10_000 });
     await expect(button).toBeEnabled();
     await expect(button).toHaveText('Sign Up');
   });
@@ -135,7 +135,7 @@ test.describe('sign-up error handling', () => {
     await signUpButton(page).click();
 
     await expect(
-      page.getByText('Too many confirmation emails have been requested. Please wait a few minutes and try again.'),
+      page.getByText('Too many requests. Please wait a few minutes and try again.'),
     ).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('body')).not.toContainText(/email rate limit exceeded/i);
 
@@ -255,7 +255,7 @@ test.describe('sign-up error handling', () => {
     await page.getByRole('button', { name: 'Resend Confirmation Email' }).click();
 
     await expect(
-      page.getByText('Too many confirmation emails have been requested. Please wait a few minutes and try again.'),
+      page.getByText('Too many requests. Please wait a few minutes and try again.'),
     ).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('body')).not.toContainText(/email rate limit exceeded/i);
   });
