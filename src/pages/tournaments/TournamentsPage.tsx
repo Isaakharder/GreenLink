@@ -31,7 +31,9 @@ function TournamentCard({ tournament, unreadCount = 0 }: { tournament: Tournamen
           {tournament.course_name} · {formatDate(tournament.tournament_date)}
         </p>
       </div>
-      <span className={`${styles.statusBadge} ${styles[tournament.status] ?? ''}`}>{tournament.status}</span>
+      {tournament.status !== 'draft' && (
+        <span className={`${styles.statusBadge} ${styles[tournament.status] ?? ''}`}>{tournament.status}</span>
+      )}
     </Link>
   );
 }
@@ -122,29 +124,29 @@ export function TournamentsPage() {
 
   return (
     <div>
-      <h1>Tournaments</h1>
+      <h1 className={styles.centered}>Tournaments</h1>
 
-      <h2 className="section-title">Pending Invitations</h2>
+      <h2 className={`section-title ${styles.centered}`}>Pending Invitations</h2>
       {invitations.length === 0 ? (
-        <p className={styles.sectionEmpty}>No pending invitations.</p>
+        <p className={`${styles.sectionEmpty} ${styles.centered}`}>No pending invitations.</p>
       ) : (
         invitations.map((invitation) => (
           <InvitationCard key={invitation.id} invitation={invitation} onRespond={refetch} />
         ))
       )}
 
-      <h2 className="section-title">Active Tournaments</h2>
+      <h2 className={`section-title ${styles.centered}`}>Active Tournaments</h2>
       {active.length === 0 ? (
-        <p className={styles.sectionEmpty}>No active tournaments.</p>
+        <p className={`${styles.sectionEmpty} ${styles.centered}`}>No active tournaments.</p>
       ) : (
         active.map((tournament) => (
           <TournamentCard key={tournament.id} tournament={tournament} unreadCount={unreadCounts.data?.get(tournament.id)} />
         ))
       )}
 
-      <h2 className="section-title">Upcoming Tournaments</h2>
+      <h2 className={`section-title ${styles.centered}`}>Upcoming Tournaments</h2>
       {upcoming.length === 0 ? (
-        <p className={styles.sectionEmpty}>No upcoming tournaments.</p>
+        <p className={`${styles.sectionEmpty} ${styles.centered}`}>No upcoming tournaments.</p>
       ) : (
         upcoming.map((tournament) => <TournamentCard key={tournament.id} tournament={tournament} />)
       )}
