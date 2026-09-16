@@ -136,12 +136,21 @@
 
 .parButtons {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
   margin-bottom: 1rem;
 }
 
+/* The button is itself the grid item here (no <li> wrapper like the hole
+   picker), so grid's own default stretch already gives all four equal
+   width/height -- display:flex centering is added explicitly rather than
+   relying on <button>'s UA-default text-align, matching .pickerItem. */
 .parButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: var(--touch-target);
   border-radius: var(--radius);
@@ -159,16 +168,27 @@
 
 /* ---- Hole picker strip ---- */
 
+/* The grid's 6 equal-width columns size the <li> items, not the buttons
+   inside them -- true 6-column layout, but each cell only defines a
+   consistent, non-overflowing WIDTH TO FILL. Without .pickerItem also being
+   told to fill that cell (below), the <button> inside falls back to sizing
+   itself from its own text content, so "1" renders narrower than "10" or
+   "18" even though their <li> cells are already identical widths. */
 .pickerList {
   list-style: none;
   margin: 0.75rem 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.4rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.3rem;
 }
 
 .pickerItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   min-width: 0;
   min-height: var(--touch-target);
   border-radius: var(--radius);

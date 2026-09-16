@@ -66,6 +66,46 @@ async function assertAllWithinViewport(page: Page, locator: Locator, context: st
   }
 }
 
+/** Every element matching locator must be the same width and the same height as the first one -- proves a true equal-size grid rather than content-sized buttons (e.g. "1" narrower than "18"). 1px tolerance for grid-track remainder rounding. */
+async function assertEqualDimensions(page: Page, locator: Locator, context: string) {
+  const count = await locator.count();
+  expect(count, `${context}: expected at least 2 elements to compare`).toBeGreaterThan(1);
+  let refWidth: number | null = null;
+  let refHeight: number | null = null;
+  for (let i = 0; i < count; i++) {
+    const box = await locator.nth(i).boundingBox();
+    if (!box) continue;
+    if (refWidth === null || refHeight === null) {
+      refWidth = box.width;
+      refHeight = box.height;
+      continue;
+    }
+    expect(Math.abs(box.width - refWidth), `${context} (#${i}): width ${box.width} differs from #0's width ${refWidth}`).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.height - refHeight), `${context} (#${i}): height ${box.height} differs from #0's height ${refHeight}`).toBeLessThanOrEqual(1);
+  }
+}
+
+/** Groups locator's matched elements by vertical position (row) and asserts every row has exactly expectedColumns items -- a true N-column grid wrap, not a flex row that happens to look right for one hole count. */
+async function assertGridColumnCount(page: Page, locator: Locator, expectedColumns: number, context: string) {
+  const count = await locator.count();
+  const rowsByY = new Map<number, number>();
+  for (let i = 0; i < count; i++) {
+    const box = await locator.nth(i).boundingBox();
+    if (!box) continue;
+    const rowKey = Math.round(box.y);
+    rowsByY.set(rowKey, (rowsByY.get(rowKey) ?? 0) + 1);
+  }
+  const expectedRows = Math.ceil(count / expectedColumns);
+  expect(rowsByY.size, `${context}: expected ${expectedRows} rows of ${expectedColumns}, found rows: ${[...rowsByY.values()]}`).toBe(expectedRows);
+  for (const [y, itemsInRow] of rowsByY) {
+    // The last row may be a partial row (fewer items); every other row must
+    // have exactly expectedColumns.
+    expect(itemsInRow, `${context}: row at y=${y} has ${itemsInRow} items`).toBeLessThanOrEqual(expectedColumns);
+  }
+  const fullRows = [...rowsByY.values()].filter((n) => n === expectedColumns).length;
+  expect(fullRows, `${context}: expected at least one full row of ${expectedColumns}`).toBeGreaterThan(0);
+}
+
 function mockUnusableGolfCourseLookup(page: Page) {
   return page.route('**/functions/v1/golf-course-lookup', async (route: Route) => {
     const body = JSON.parse(route.request().postData() ?? '{}');
@@ -122,11 +162,22 @@ for (const width of PHONE_WIDTHS) {
     await expect(page.getByLabel('Course rating (optional)')).toBeVisible();
     await expect(page.getByLabel('Slope rating (optional)')).toBeVisible();
 
-    // Hole editor: par buttons must all be visible and within the viewport.
-    await assertAllWithinViewport(page, page.getByRole('radio', { name: /^[3-6]$/ }), `${width}px: par buttons`);
+    // Hole editor: par buttons must all be visible, within the viewport, and
+    // identically sized (four equal-width/height controls, not content-sized).
+    const parButtons = page.getByRole('radio', { name: /^[3-6]$/ });
+    await assertAllWithinViewport(page, parButtons, `${width}px: par buttons`);
+    await assertEqualDimensions(page, parButtons, `${width}px: par buttons`);
     await page.getByRole('radio', { name: '4', exact: true }).click();
     await page.fill('[id^="hole-yardage-"]', '350');
     await assertNoHorizontalOverflow(page, `${width}px: Tee editor, hole card filled`);
+
+    // Hole navigation: true 6-column grid -- all 18 buttons the same size
+    // (not "1" narrower than "10"/"18"), laid out 6 per row, fully on-screen.
+    const holePickerButtons = page.locator('button[class*="pickerItem"]');
+    await expect(holePickerButtons).toHaveCount(18);
+    await assertAllWithinViewport(page, holePickerButtons, `${width}px: hole picker buttons`);
+    await assertEqualDimensions(page, holePickerButtons, `${width}px: hole picker buttons`);
+    await assertGridColumnCount(page, holePickerButtons, 6, `${width}px: hole picker grid`);
 
     for (let hole = 2; hole <= 18; hole++) {
       await page.getByRole('button', { name: 'Next Hole' }).click();
@@ -197,6 +248,17 @@ test('desktop: Course rating and Slope rating render side by side, not stacked (
   // slope's y would jump well below rating's instead.
   expect(Math.abs(ratingBox.y - slopeBox.y)).toBeLessThan(5);
   expect(slopeBox.x).toBeGreaterThan(ratingBox.x + ratingBox.width);
+
+  // The hole picker and par selector stay sensible on desktop too -- this
+  // app's interior pages are capped to a single ~480px content column
+  // (AppShell's .main) regardless of viewport, so the same equal-size,
+  // 6-column behavior verified on phones must still hold here.
+  const parButtons = page.getByRole('radio', { name: /^[3-6]$/ });
+  await assertEqualDimensions(page, parButtons, 'desktop: par buttons');
+  const holePickerButtons = page.locator('button[class*="pickerItem"]');
+  await expect(holePickerButtons).toHaveCount(18);
+  await assertEqualDimensions(page, holePickerButtons, 'desktop: hole picker buttons');
+  await assertGridColumnCount(page, holePickerButtons, 6, 'desktop: hole picker grid');
 
   await archiveCoursesCreatedBy(owner.userId);
 });
