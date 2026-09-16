@@ -16,6 +16,8 @@ import { EditProfile } from './pages/EditProfile';
 import { Settings } from './pages/settings/Settings';
 import { CourseLibrary } from './pages/settings/CourseLibrary';
 import { CourseForm } from './pages/settings/CourseForm';
+import { ManageMembers } from './pages/settings/ManageMembers';
+import { MemberDetail } from './pages/settings/MemberDetail';
 import { MyGolf } from './pages/MyGolf';
 import { StartRound } from './pages/myGolf/StartRound';
 import { PersonalRoundShell } from './pages/myGolf/PersonalRoundShell';
@@ -74,6 +76,8 @@ export function App() {
               <Route path="/settings/courses" element={<CourseLibrary />} />
               <Route path="/settings/courses/new" element={<CourseForm />} />
               <Route path="/settings/courses/:courseId/edit" element={<CourseForm />} />
+              <Route path="/settings/admin/members" element={<ManageMembers />} />
+              <Route path="/settings/admin/members/:memberId" element={<MemberDetail />} />
 
               <Route path="/tournaments" element={<TournamentsPage />} />
               <Route path="/tournaments/new" element={<CreateTournament />} />

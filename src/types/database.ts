@@ -8,6 +8,9 @@ export type MembershipStatus = 'accepted' | 'removed';
 export type DistanceUnit = 'yards' | 'metres';
 export type PersonalRoundVisibility = 'private' | 'public';
 export type WalkingOrCart = 'walking' | 'cart';
+// profiles.membership_status (0037) -- Active/Former Member, distinct from
+// MembershipStatus above (which is a tournament_players row's own status).
+export type ProfileMembershipStatus = 'active' | 'inactive';
 
 export interface Profile {
   id: string;
@@ -15,8 +18,25 @@ export interface Profile {
   first_name: string;
   last_name: string;
   photo_path: string | null;
+  is_admin: boolean;
+  membership_status: ProfileMembershipStatus;
   created_at: string;
   updated_at: string;
+}
+
+// admin_list_members() (0037) -- every member (active + inactive), for the
+// Admin -> Manage Members screen only. Never includes email, matching the
+// same "email is account-only" rule as the ordinary Member shape below.
+export interface AdminMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+  username: string;
+  photo_path: string | null;
+  membership_status: ProfileMembershipStatus;
+  is_admin: boolean;
+  completed_rounds_count: number;
+  member_since: string;
 }
 
 // One row per GreenLink user (list_members() RPC) -- every profile is

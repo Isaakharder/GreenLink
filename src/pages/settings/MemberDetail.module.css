@@ -1,0 +1,104 @@
+.summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  text-align: center;
+  padding: 1.5rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0;
+}
+
+.username {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.adminBadge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: #eef1ee;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+.detailList {
+  margin: 0 0 1.5rem;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+  gap: 0.75rem;
+}
+
+.row dt {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  flex: none;
+}
+
+.row dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.statusBadge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: #eef1ee;
+  color: var(--color-text-muted);
+}
+
+.statusBadge.active {
+  background: #e0f5e6;
+  color: #1b8a4a;
+}
+
+.statusBadge.inactive {
+  background: #f7e6e5;
+  color: var(--color-danger);
+}
+
+.dangerZone {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.dangerExplainer {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.confirmLabel {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.375rem;
+}
+
+.confirmLabel strong {
+  word-break: break-word;
+}
+
+.dangerZone .field {
+  margin-bottom: 0.75rem;
+}

@@ -27,7 +27,7 @@ begin;
 
 create extension if not exists pgtap;
 
-select plan(13);
+select plan(16);
 
 -- ---------------------------------------------------------------------------
 -- 1) The allowlist itself: anon may execute exactly one application function
@@ -88,6 +88,9 @@ select ok(has_function_privilege('authenticated', 'public.can_manage_course(uuid
 select ok(has_function_privilege('authenticated', 'public.create_tournament(text, text, date, integer, text, integer, text)', 'EXECUTE'), 'authenticated can still execute create_tournament()');
 select ok(has_function_privilege('authenticated', 'public.submit_team_score(uuid, uuid, uuid, integer, integer, integer, timestamptz)', 'EXECUTE'), 'authenticated can still execute submit_team_score()');
 select ok(has_function_privilege('authenticated', 'public.send_tournament_message(uuid, uuid, text)', 'EXECUTE'), 'authenticated can still execute send_tournament_message()');
+select ok(has_function_privilege('authenticated', 'public.admin_list_members()', 'EXECUTE'), 'authenticated can still execute admin_list_members() (is_admin() enforced in-body -- see admin_member_management.sql)');
+select ok(has_function_privilege('authenticated', 'public.admin_set_member_status(uuid, text)', 'EXECUTE'), 'authenticated can still execute admin_set_member_status() (is_admin() enforced in-body)');
+select ok(has_function_privilege('authenticated', 'public.admin_permanently_delete_member(uuid)', 'EXECUTE'), 'authenticated can still execute admin_permanently_delete_member() (is_admin() enforced in-body)');
 
 -- ---------------------------------------------------------------------------
 -- 4) The postgres/public default ACL for functions no longer auto-grants
