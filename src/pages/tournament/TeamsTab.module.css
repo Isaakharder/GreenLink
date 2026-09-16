@@ -18,3 +18,9 @@
   padding: 0.25rem 0;
   color: var(--color-text);
 }
+
+.memberRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

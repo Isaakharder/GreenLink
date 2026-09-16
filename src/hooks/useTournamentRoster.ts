@@ -7,6 +7,7 @@ export interface RosterPlayer {
   userId: string;
   name: string;
   username: string;
+  photoPath: string | null;
   teamId: string | null;
   isOrganizer: boolean;
   joinedAt: string;
@@ -17,6 +18,7 @@ export interface RosterInvitation {
   invitedUserId: string;
   name: string;
   username: string;
+  photoPath: string | null;
   status: InvitationStatus;
   createdAt: string;
   respondedAt: string | null;
@@ -63,8 +65,8 @@ async function fetchRoster(tournamentId: string): Promise<TournamentRoster> {
 
   const { data: profiles, error: profilesError } =
     userIds.length > 0
-      ? await supabase.from('profiles').select('id, first_name, last_name, username').in('id', userIds)
-      : { data: [] as { id: string; first_name: string; last_name: string; username: string }[], error: null };
+      ? await supabase.from('profiles').select('id, first_name, last_name, username, photo_path').in('id', userIds)
+      : { data: [] as { id: string; first_name: string; last_name: string; username: string; photo_path: string | null }[], error: null };
   if (profilesError) throw profilesError;
 
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
@@ -77,6 +79,7 @@ async function fetchRoster(tournamentId: string): Promise<TournamentRoster> {
         userId: player.user_id,
         name: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown player',
         username: profile?.username ?? '',
+        photoPath: profile?.photo_path ?? null,
         teamId: player.team_id,
         isOrganizer: player.is_organizer,
         joinedAt: player.joined_at,
@@ -89,6 +92,7 @@ async function fetchRoster(tournamentId: string): Promise<TournamentRoster> {
         invitedUserId: invitation.invited_user_id,
         name: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown player',
         username: profile?.username ?? '',
+        photoPath: profile?.photo_path ?? null,
         status: invitation.status as InvitationStatus,
         createdAt: invitation.created_at,
         respondedAt: invitation.responded_at,

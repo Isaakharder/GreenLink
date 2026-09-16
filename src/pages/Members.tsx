@@ -1,3 +1,4 @@
+import { Avatar } from '../components/Avatar';
 import { useMembers } from '../hooks/useMembers';
 import { formatMembershipDuration } from '../lib/memberDirectory';
 import styles from './Members.module.css';
@@ -33,10 +34,12 @@ export function Members() {
           // Non-interactive: there's no member profile page to link to yet.
           // Make this a <button>/<Link> once one exists.
           <div key={member.id} className={styles.card}>
-            <div>
+            <Avatar name={`${member.first_name} ${member.last_name}`} photoPath={member.photo_path} size="medium" />
+            <div className={styles.info}>
               <p className={styles.name}>
                 {member.first_name} {member.last_name}
               </p>
+              <p className={styles.username}>@{member.username}</p>
               <div className={styles.meta}>
                 <span className="badge badge-accepted">Active Member</span>
                 <span>{formatMembershipDuration(member.member_since)}</span>

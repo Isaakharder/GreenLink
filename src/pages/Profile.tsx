@@ -7,6 +7,7 @@ import { clearPrivateCache } from '../lib/offlineCache';
 import { retrySyncNow } from '../lib/sync';
 import { useProfile } from '../hooks/useProfile';
 import { useAuth } from '../auth/useAuth';
+import { Avatar } from '../components/Avatar';
 import styles from './Profile.module.css';
 
 export function Profile() {
@@ -49,13 +50,21 @@ export function Profile() {
   return (
     <div>
       <h1>Profile</h1>
-      <div className="card">
-        <p className={styles.name}>
-          {profile?.first_name} {profile?.last_name}
-        </p>
-        <p className={styles.username}>@{profile?.username}</p>
-        <p className={styles.email}>{user?.email}</p>
-      </div>
+      <Link to="/profile/edit" className={`card ${styles.card}`}>
+        <Avatar
+          name={profile ? `${profile.first_name} ${profile.last_name}` : ''}
+          photoPath={profile?.photo_path}
+          size="large"
+        />
+        <div className={styles.info}>
+          <p className={styles.name}>
+            {profile?.first_name} {profile?.last_name}
+          </p>
+          <p className={styles.username}>@{profile?.username}</p>
+          <p className={styles.email}>{user?.email}</p>
+        </div>
+        <span className={styles.editChevron}>Edit ›</span>
+      </Link>
 
       <Link to="/settings" className="btn btn-secondary">
         Settings

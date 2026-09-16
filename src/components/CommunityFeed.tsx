@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Avatar } from './Avatar';
 import { usePublicRoundFeed } from '../hooks/usePublicRoundFeed';
 import { usePublicRoundDetail } from '../hooks/usePublicRoundDetail';
 import { formatRelativeTime } from '../lib/relativeTime';
@@ -8,13 +9,13 @@ import type { PublicRoundFeedItem } from '../types/database';
 import styles from './CommunityFeed.module.css';
 
 function FeedItem({ item, onSelect }: { item: PublicRoundFeedItem; onSelect: () => void }) {
+  const playerName = `${item.player_first_name} ${item.player_last_name}`;
   return (
     <li>
       <button type="button" className={styles.item} onClick={onSelect}>
         <div className={styles.itemHeader}>
-          <span className={styles.playerName}>
-            {item.player_first_name} {item.player_last_name}
-          </span>
+          <Avatar name={playerName} photoPath={item.player_photo_path} size="small" />
+          <span className={styles.playerName}>{playerName}</span>
           <span className={styles.time}>{formatRelativeTime(item.completed_at)}</span>
         </div>
         <div className={styles.itemScore}>

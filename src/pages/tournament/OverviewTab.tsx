@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
+import { Avatar } from '../../components/Avatar';
 import { useTournamentReadiness } from '../../hooks/useTournamentReadiness';
 import { useTournamentProgress } from '../../hooks/useTournamentProgress';
 import { refreshIfDownloaded } from '../../lib/offlineDownload';
@@ -14,6 +15,7 @@ import styles from './OverviewTab.module.css';
 interface RosterEntry {
   userId: string;
   name: string;
+  photoPath: string | null;
   isOrganizer: boolean;
 }
 
@@ -35,7 +37,7 @@ async function fetchRoster(tournamentId: string): Promise<RosterEntry[]> {
   const userIds = [...new Set(players.map((p) => p.user_id))];
   const { data: profiles, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, first_name, last_name')
+    .select('id, first_name, last_name, photo_path')
     .in('id', userIds);
   if (profilesError) throw profilesError;
 
@@ -46,6 +48,7 @@ async function fetchRoster(tournamentId: string): Promise<RosterEntry[]> {
     return {
       userId: player.user_id,
       name: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown player',
+      photoPath: profile?.photo_path ?? null,
       isOrganizer: player.is_organizer,
     };
   });
@@ -99,7 +102,7 @@ export function OverviewTab() {
     return <ResultsTab />;
   }
 
-  const organizerName = rosterQuery.data?.find((player) => player.isOrganizer)?.name ?? '—';
+  const organizer = rosterQuery.data?.find((player) => player.isOrganizer) ?? null;
   const readiness = readinessQuery.data;
   const progress = progressQuery.data;
 
@@ -237,7 +240,10 @@ export function OverviewTab() {
         </div>
         <div className={styles.row}>
           <dt>Organizer</dt>
-          <dd>{organizerName}</dd>
+          <dd className={styles.organizerValue}>
+            {organizer && <Avatar name={organizer.name} photoPath={organizer.photoPath} size="small" />}
+            {organizer?.name ?? '—'}
+          </dd>
         </div>
         <div className={styles.row}>
           <dt>Scoring format</dt>
@@ -277,8 +283,11 @@ export function OverviewTab() {
       ) : rosterQuery.data && rosterQuery.data.length > 0 ? (
         <ul className={styles.roster}>
           {rosterQuery.data.map((player) => (
-            <li key={player.userId}>
-              {player.name} {player.isOrganizer && <span className={styles.organizerTag}>Organizer</span>}
+            <li key={player.userId} className={styles.rosterRow}>
+              <Avatar name={player.name} photoPath={player.photoPath} size="small" />
+              <span>
+                {player.name} {player.isOrganizer && <span className={styles.organizerTag}>Organizer</span>}
+              </span>
             </li>
           ))}
         </ul>

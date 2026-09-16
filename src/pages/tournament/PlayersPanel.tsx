@@ -102,7 +102,7 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
             const status = resolveInviteStatus(member.id, players, invitations);
             return (
               <div key={member.id} className={styles.playerRow}>
-                <Avatar name={`${member.first_name} ${member.last_name}`} />
+                <Avatar name={`${member.first_name} ${member.last_name}`} photoPath={member.photo_path} />
                 <div className={styles.playerInfo}>
                   <p className={styles.playerName}>
                     {member.first_name} {member.last_name}
@@ -132,7 +132,7 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
       <h2 className="section-title">Organizer</h2>
       {organizer ? (
         <div className={styles.playerRow}>
-          <Avatar name={organizer.name} />
+          <Avatar name={organizer.name} photoPath={organizer.photoPath} />
           <div className={styles.playerInfo}>
             <p className={styles.playerName}>{organizer.name}</p>
             <p className={styles.playerMeta}>@{organizer.username}</p>
@@ -149,7 +149,7 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
       ) : (
         acceptedPlayers.map((player) => (
           <div key={player.playerId} className={styles.playerRow}>
-            <Avatar name={player.name} />
+            <Avatar name={player.name} photoPath={player.photoPath} />
             <div className={styles.playerInfo}>
               <p className={styles.playerName}>{player.name}</p>
               <p className={styles.playerMeta}>
@@ -177,7 +177,7 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
       ) : (
         pendingInvitations.map((invitation) => (
           <div key={invitation.id} className={styles.playerRow}>
-            <Avatar name={invitation.name} />
+            <Avatar name={invitation.name} photoPath={invitation.photoPath} />
             <div className={styles.playerInfo}>
               <p className={styles.playerName}>{invitation.name}</p>
               <p className={styles.playerMeta}>@{invitation.username}</p>
@@ -203,7 +203,7 @@ export function PlayersPanel({ tournamentId, players, invitations, teams, isPreL
       ) : (
         closedInvitations.map((invitation) => (
           <div key={invitation.id} className={styles.playerRow}>
-            <Avatar name={invitation.name} />
+            <Avatar name={invitation.name} photoPath={invitation.photoPath} />
             <div className={styles.playerInfo}>
               <p className={styles.playerName}>{invitation.name}</p>
               <p className={styles.playerMeta}>@{invitation.username}</p>

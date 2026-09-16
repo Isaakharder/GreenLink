@@ -21,18 +21,21 @@ export interface Profile {
 
 // One row per GreenLink user (list_members() RPC) -- every profile is
 // currently considered an Active Member; a real membership-status/dues/
-// renewal system can extend this later. username is included (0034) because
-// it's already deliberately searchable by any authenticated user via
-// search_profile_by_username() -- not a new privacy exposure. Deliberately
-// excludes every other profiles column (photo_path, is_admin) beyond
-// created_at (renamed member_since -- the sign-up date, never updated) and
-// never joins email -- this is the public member directory shape, not a
-// profile.
+// renewal system can extend this later. username and photo_path are
+// included (0034, 0035) because they're either already deliberately
+// searchable (username, via search_profile_by_username()) or gated by their
+// own access control (photo_path is a private-bucket storage path, only
+// resolvable to a viewable image through useAvatarUrl, itself governed by
+// storage RLS) -- neither is a new privacy exposure. Deliberately excludes
+// every other profiles column (is_admin) beyond created_at (renamed
+// member_since -- the sign-up date, never updated) and never joins email --
+// this is the public member directory shape, not a profile.
 export interface Member {
   id: string;
   first_name: string;
   last_name: string;
   username: string;
+  photo_path: string | null;
   completed_rounds_count: number;
   member_since: string;
 }
@@ -73,8 +76,10 @@ export interface PersonalRound {
 // get_public_round_feed() return shape (Home page Community Feed).
 export interface PublicRoundFeedItem {
   tournament_id: string;
+  player_id: string;
   player_first_name: string;
   player_last_name: string;
+  player_photo_path: string | null;
   course_name: string;
   tee_name: string | null;
   tournament_date: string;

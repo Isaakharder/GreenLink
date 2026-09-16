@@ -173,15 +173,16 @@ select is(
   'member_since matches the profile''s own created_at (sign-up date)'
 );
 
--- No email/username/is_admin/photo_path column exists on the return type at
--- all -- proven structurally (a function's RETURNS TABLE is a fixed column
--- list, not just "whatever the query includes"), not just by omission from a
--- SELECT the RPC happens to run today.
+-- No email/is_admin column exists on the return type at all -- proven
+-- structurally (a function's RETURNS TABLE is a fixed column list, not
+-- just "whatever the query includes"), not just by omission from a SELECT
+-- the RPC happens to run today. photo_path (0035) is a storage path, not
+-- account/auth data -- see avatar_storage.sql for its own coverage.
 select ok(
-  (select count(*) = 6 from information_schema.parameters where specific_schema = 'public' and specific_name in (
+  (select count(*) = 7 from information_schema.parameters where specific_schema = 'public' and specific_name in (
     select specific_name from information_schema.routines where routine_schema = 'public' and routine_name = 'list_members'
   ) and parameter_mode = 'OUT'),
-  'list_members() returns exactly 6 output columns -- id, first_name, last_name, username, completed_rounds_count, member_since'
+  'list_members() returns exactly 7 output columns -- id, first_name, last_name, username, photo_path, completed_rounds_count, member_since'
 );
 
 select ok(

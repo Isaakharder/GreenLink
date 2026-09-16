@@ -12,6 +12,7 @@ import { ResetPassword } from './pages/ResetPassword';
 import { Home } from './pages/Home';
 import { Members } from './pages/Members';
 import { Profile } from './pages/Profile';
+import { EditProfile } from './pages/EditProfile';
 import { Settings } from './pages/settings/Settings';
 import { CourseLibrary } from './pages/settings/CourseLibrary';
 import { CourseForm } from './pages/settings/CourseForm';
@@ -68,6 +69,7 @@ export function App() {
                 <Route index element={<ScorecardTab />} />
               </Route>
               <Route path="/profile" element={<Profile />} />
+              <Route path="/profile/edit" element={<EditProfile />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/courses" element={<CourseLibrary />} />
               <Route path="/settings/courses/new" element={<CourseForm />} />

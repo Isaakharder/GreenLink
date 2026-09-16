@@ -184,7 +184,7 @@ export function TeamsPanel({ tournamentId, players, teams, teamSize, isPreLive, 
                 <ul className={styles.memberList}>
                   {teamPlayers.map((player) => (
                     <li key={player.playerId} className={styles.memberRow}>
-                      <Avatar name={player.name} size="small" />
+                      <Avatar name={player.name} photoPath={player.photoPath} size="small" />
                       <span className={styles.memberName}>{player.name}</span>
                       {isPreLive && (
                         <button

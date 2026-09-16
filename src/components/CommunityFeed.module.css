@@ -18,15 +18,20 @@
 
 .itemHeader {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .playerName {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
   font-weight: 700;
 }
 
 .time {
+  flex: none;
   font-size: 0.8125rem;
   color: var(--color-text-muted);
 }

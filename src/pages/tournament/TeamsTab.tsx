@@ -1,6 +1,7 @@
 import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabaseClient';
+import { Avatar } from '../../components/Avatar';
 import { useTournamentRoster } from '../../hooks/useTournamentRoster';
 import { refreshIfDownloaded } from '../../lib/offlineDownload';
 import { useAuth } from '../../auth/useAuth';
@@ -9,11 +10,17 @@ import { PlayersPanel } from './PlayersPanel';
 import { TeamsPanel } from './TeamsPanel';
 import styles from './TeamsTab.module.css';
 
+interface TeamRosterMember {
+  userId: string;
+  name: string;
+  photoPath: string | null;
+}
+
 interface TeamWithRoster {
   id: string;
   name: string | null;
   teamNumber: number | null;
-  members: string[];
+  members: TeamRosterMember[];
 }
 
 async function fetchTeams(tournamentId: string): Promise<TeamWithRoster[]> {
@@ -35,8 +42,8 @@ async function fetchTeams(tournamentId: string): Promise<TeamWithRoster[]> {
   const userIds = [...new Set((players ?? []).map((p) => p.user_id))];
   const { data: profiles, error: profilesError } =
     userIds.length > 0
-      ? await supabase.from('profiles').select('id, first_name, last_name').in('id', userIds)
-      : { data: [] as { id: string; first_name: string; last_name: string }[], error: null };
+      ? await supabase.from('profiles').select('id, first_name, last_name, photo_path').in('id', userIds)
+      : { data: [] as { id: string; first_name: string; last_name: string; photo_path: string | null }[], error: null };
   if (profilesError) throw profilesError;
 
   const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
@@ -49,7 +56,11 @@ async function fetchTeams(tournamentId: string): Promise<TeamWithRoster[]> {
       .filter((player) => player.team_id === team.id)
       .map((player) => {
         const profile = profileById.get(player.user_id);
-        return profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown player';
+        return {
+          userId: player.user_id,
+          name: profile ? `${profile.first_name} ${profile.last_name}` : 'Unknown player',
+          photoPath: profile?.photo_path ?? null,
+        };
       }),
   }));
 }
@@ -77,7 +88,10 @@ function ReadOnlyTeamsView({ tournamentId }: { tournamentId: string }) {
           {team.members.length > 0 ? (
             <ul className={styles.memberList}>
               {team.members.map((member) => (
-                <li key={member}>{member}</li>
+                <li key={member.userId} className={styles.memberRow}>
+                  <Avatar name={member.name} photoPath={member.photoPath} size="small" />
+                  {member.name}
+                </li>
               ))}
             </ul>
           ) : (

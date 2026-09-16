@@ -40,6 +40,21 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.rosterRow {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.organizerValue {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  text-transform: none;
+  overflow-wrap: break-word;
+}
+
 .organizerTag {
   font-size: 0.7rem;
   font-weight: 700;
